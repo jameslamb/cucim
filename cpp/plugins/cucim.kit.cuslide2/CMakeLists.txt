@@ -198,6 +198,7 @@ add_library(${CUCIM_PLUGIN_NAME} MODULE
     # nvImageCodec decoder implementation
     ${CUSLIDE_SRC_DIR}/nvimgcodec/nvimgcodec_decoder.cpp
     ${CUSLIDE_SRC_DIR}/nvimgcodec/nvimgcodec_decoder.h
+    ${CUSLIDE_SRC_DIR}/nvimgcodec/nvimgcodec_manager.h
     ${CUSLIDE_SRC_DIR}/nvimgcodec/nvimgcodec_tiff_parser.cpp
     ${CUSLIDE_SRC_DIR}/nvimgcodec/nvimgcodec_tiff_parser.h)
 
