@@ -791,12 +791,11 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         {347, "JPEGTABLES"}        // Shared JPEG tables
     };
     
-    /* NOTE: nvImageCodec 0.6.0 Limitation 
+    // NOTE: nvImageCodec 0.6.0 Limitation
     // ================================================================
     // Individual TIFF tag access (kind=0, TIFF_TAG) is NOT available in 0.6.0
     // Only vendor-specific metadata blobs are exposed (MED_APERIO, MED_PHILIPS, etc.)
-    
-    
+
     int extracted_count = 0;
     
     // File extension heuristics for known WSI (Whole Slide Imaging) formats
