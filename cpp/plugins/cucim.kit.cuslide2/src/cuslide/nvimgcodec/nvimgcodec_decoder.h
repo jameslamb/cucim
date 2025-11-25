@@ -22,10 +22,10 @@ struct IfdInfo;
 
 /**
  * Decode a region of interest (ROI) from an IFD using nvImageCodec
- * 
+ *
  * Uses nvImageCodec's CodeStreamView with region specification for
  * memory-efficient decoding of specific image areas.
- * 
+ *
  * @param ifd_info Parsed IFD information with sub_code_stream
  * @param main_code_stream Main TIFF code stream (for creating ROI views)
  * @param x Starting x coordinate (column)
