@@ -197,23 +197,23 @@ target_compile_features(${CUCIM_PLUGIN_NAME} PRIVATE cxx_std_17)
 # Use generator expression to avoid `nvcc fatal   : Value '-std=c++17' is not defined for option 'Werror'`
 target_compile_options(${CUCIM_PLUGIN_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Werror -Wall -Wextra>)
 
-# Link libraries - PURE nvImageCodec (no CPU decoder dependencies)
+# Link libraries - Core dependencies (always required)
 target_link_libraries(${CUCIM_PLUGIN_NAME}
         PRIVATE
             deps::fmt
             cucim::cucim
             deps::pugixml
             deps::json
-            deps::nvimgcodec
         )
 
-# Add nvImageCodec compile definition if the target exists and has content
+# Conditionally link nvImageCodec if available
 if(TARGET deps::nvimgcodec)
     get_target_property(NVIMGCODEC_LOCATION deps::nvimgcodec IMPORTED_LOCATION)
     get_target_property(NVIMGCODEC_INTERFACE_LINK deps::nvimgcodec INTERFACE_LINK_LIBRARIES)
 
     # Check if it's a real target (has location or interface links) vs dummy target
     if(NVIMGCODEC_LOCATION OR NVIMGCODEC_INTERFACE_LINK OR TARGET nvimgcodec::nvimgcodec)
+        target_link_libraries(${CUCIM_PLUGIN_NAME} PRIVATE deps::nvimgcodec)
         target_compile_definitions(${CUCIM_PLUGIN_NAME} PRIVATE CUCIM_HAS_NVIMGCODEC)
         message(STATUS "✓ nvImageCodec enabled - GPU-accelerated JPEG/JPEG2000 decoding available")
     else()
