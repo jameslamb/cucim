@@ -37,9 +37,9 @@ def setup_environment():
     print(f"✅ Plugin configuration: {config_path}")
     print(f"✅ Plugin library path: {plugin_lib}")
     
-    return True
+    return str(plugin_lib)
 
-def test_aperio_svs(svs_path):
+def test_aperio_svs(svs_path, plugin_lib):
     """Test cuslide2 plugin with an Aperio SVS file"""
     
     print(f"\n🔬 Testing cuslide2 plugin with Aperio SVS")
@@ -52,9 +52,6 @@ def test_aperio_svs(svs_path):
     
     try:
         # Set plugin root AFTER importing cucim but BEFORE creating CuImage
-        repo_root = Path(__file__).parent.parent
-        plugin_lib = repo_root / "cpp/plugins/cucim.kit.cuslide2/build-release/lib"
-        
         from cucim.clara import _set_plugin_root
         _set_plugin_root(str(plugin_lib))
         print(f"✅ Plugin root set: {plugin_lib}")
@@ -256,10 +253,10 @@ def main():
             return 1
     
     # Setup environment
-    setup_environment()
+    plugin_lib = setup_environment()
     
     # Test the SVS file
-    success = test_aperio_svs(svs_path)
+    success = test_aperio_svs(svs_path, plugin_lib)
     
     return 0 if success else 1
 
