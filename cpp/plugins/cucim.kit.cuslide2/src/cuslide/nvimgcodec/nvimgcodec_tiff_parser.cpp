@@ -741,22 +741,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
     // 1. Individual TIFF tags (SOFTWARE, ImageDescription, etc.)
     // 2. Philips format detection for some files
     //
-    // This means:
-    // - If nvImageCodec doesn't detect the file as Philips (kind=2), we can't get the XML
-    // - The SOFTWARE tag is not available to trigger Philips detection
-    // - ImageDescription tag (270) with Philips XML is not accessible
-    //
-    // SOLUTION: Upgrade to nvImageCodec 0.7.0+ which supports:
-    // - Individual TIFF tag queries (e.g., decoder.get_metadata(scs, name="ImageDescription"))
-    // - Better vendor format detection
-    // - Full TIFF tag access via kind=0 (TIFF_TAG)
-    //
-    // Reference: Slack thread Oct 21-Nov 12, 2024 (swdl-image-codecs)
-    // - Michal Kepa: "retrieving individual tiff tag is currently only on the internal branch"
-    // - Sebastian Matysik: "this is added in 0.7.0 which was not released yet"
-    //
-    // Until 0.7.0 is available, Philips metadata parsing will only work for files that
-    // nvImageCodec successfully detects as Philips format (exposes MED_PHILIPS metadata).
+   
 }
 
 const IfdInfo& TiffFileParser::get_ifd(uint32_t index) const
@@ -899,19 +884,11 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         {347, "JPEGTABLES"}        // Shared JPEG tables
     };
     
-    // NOTE: nvImageCodec 0.6.0 Limitation (confirmed by NVIDIA team)
+    /* NOTE: nvImageCodec 0.6.0 Limitation 
     // ================================================================
     // Individual TIFF tag access (kind=0, TIFF_TAG) is NOT available in 0.6.0
     // Only vendor-specific metadata blobs are exposed (MED_APERIO, MED_PHILIPS, etc.)
-    // 
-    // Individual TIFF tag queries will be available in nvImageCodec 0.7.0 (mid-November 2024):
-    // Example: metadata = decoder.get_metadata(scs, name="Compression")
-    // 
-    // Reference: https://nvidia.slack.com/archives/C092X06LK9U (Oct 27, 2024)
-    // - Michal Kepa: "retrieving individual tiff tag is currently only on the internal branch"
-    // - Sebastian Matysik: "this is added in 0.7.0 which was not released yet"
-    //
-    // WORKAROUND for 0.6.0: Use file extension heuristics
+    
     
     int extracted_count = 0;
     
