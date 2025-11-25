@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2020-2022, NVIDIA CORPORATION.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025, NVIDIA CORPORATION.
+ * SPDX-License-Identifier: Apache-2.0
  */
 #define CUCIM_EXPORTS
 
@@ -112,11 +101,11 @@ static bool CUCIM_ABI parser_parse(CuCIMFileHandle_ptr handle_ptr, cucim::io::fo
     // Detect if this is an Aperio SVS file
     // Try ImageDescription first (works with nvImageCodec 0.7.0+)
     bool is_aperio_svs = (tif->ifd(0)->image_description().rfind("Aperio", 0) == 0);
-    
+
     // Detect if this is a Philips TIFF file
     // Philips TIFF also has multiple SubfileType=0 (by design)
     bool is_philips_tiff = (tif->tiff_type() == cuslide::tiff::TiffType::Philips);
-    
+
     // Fallback detection for nvImageCodec 0.6.0: check for multiple resolution levels
     // Aperio SVS files typically have 3-6 IFDs with multiple resolution levels
     // If we have multiple IFDs and they look like a pyramid, treat as Aperio/SVS
@@ -134,7 +123,7 @@ static bool CUCIM_ABI parser_parse(CuCIMFileHandle_ptr handle_ptr, cucim::io::fo
                 break;
             }
         }
-        
+
         if (is_pyramid)
         {
             #ifdef DEBUG
@@ -143,7 +132,7 @@ static bool CUCIM_ABI parser_parse(CuCIMFileHandle_ptr handle_ptr, cucim::io::fo
             is_aperio_svs = true;
         }
     }
-    
+
     // If not Aperio SVS, Philips TIFF, or multi-resolution pyramid, apply strict validation
     if (!is_aperio_svs && !is_philips_tiff)
     {
