@@ -357,7 +357,15 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         // Step 8: Wait for completion
         nvimgcodecProcessingStatus_t decode_status = NVIMGCODEC_PROCESSING_STATUS_UNKNOWN;
         size_t status_size = 1;
-        nvimgcodecFutureGetProcessingStatus(decode_future.get(), &decode_status, &status_size);
+        status = nvimgcodecFutureGetProcessingStatus(decode_future.get(), &decode_status, &status_size);
+        
+        if (status != NVIMGCODEC_STATUS_SUCCESS)
+        {
+            #ifdef DEBUG
+            fmt::print("❌ Failed to get processing status (status: {})\n", static_cast<int>(status));
+            #endif
+            return false;  // RAII handles cleanup
+        }
         
         if (use_device_memory)
         {
