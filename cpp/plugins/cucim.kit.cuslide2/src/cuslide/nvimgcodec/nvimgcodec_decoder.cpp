@@ -313,50 +313,9 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             return false;
         }
         
-        // Step 10: Handle GPU-to-CPU copy if target is CPU but we decoded to GPU
-        if (target_is_cpu && buffer_kind == NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE)
-        {
-            // Successful GPU decode, now copy to CPU
-            #ifdef DEBUG
-            fmt::print("✅ Successfully decoded IFD[{}] region\n", ifd_info.index);
-            fmt::print("  📥 Copying decoded data from GPU to CPU...\n");
-            #endif
-            
-            void* gpu_buffer = buffer;
-            buffer = malloc(buffer_size);
-            if (!buffer)
-            {
-                #ifdef DEBUG
-                fmt::print("❌ Failed to allocate CPU memory for copy\n");
-                #endif
-                cudaFree(gpu_buffer);
-                nvimgcodecCodeStreamDestroy(roi_stream);
-                return false;
-            }
-            
-            cudaError_t cuda_status = cudaMemcpy(buffer, gpu_buffer, buffer_size, cudaMemcpyDeviceToHost);
-            cudaFree(gpu_buffer);  // Free GPU buffer after copy
-            
-            if (cuda_status != cudaSuccess)
-            {
-                #ifdef DEBUG
-                fmt::print("❌ Failed to copy from GPU to CPU: {}\n", 
-                          cudaGetErrorString(cuda_status));
-                #endif
-                free(buffer);
-                nvimgcodecCodeStreamDestroy(roi_stream);
-                return false;
-            }
-            #ifdef DEBUG
-            fmt::print("  ✅ GPU-to-CPU copy completed\n");
-            #endif
-        }
-        else
-        {
-            #ifdef DEBUG
-            fmt::print("✅ Successfully decoded IFD[{}] region\n", ifd_info.index);
-            #endif
-        }
+        #ifdef DEBUG
+        fmt::print("✅ Successfully decoded IFD[{}] region\n", ifd_info.index);
+        #endif
         
         // Clean up
         nvimgcodecCodeStreamDestroy(roi_stream);
