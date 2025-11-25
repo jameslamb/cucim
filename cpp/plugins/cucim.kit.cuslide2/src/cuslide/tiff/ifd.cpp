@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2020-2021, NVIDIA CORPORATION.
+ * SPDX-FileCopyrightText: Copyright (c) 2020-2025, NVIDIA CORPORATION.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -323,6 +323,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
         }
         else
         {
+
             #ifdef DEBUG
             fmt::print("❌ nvImageCodec ROI decode failed for IFD[{}]\n", ifd_index_);
             #endif

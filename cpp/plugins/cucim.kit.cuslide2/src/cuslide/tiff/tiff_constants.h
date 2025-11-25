@@ -51,4 +51,3 @@ constexpr uint32_t TIFF_ISTILED = 0x00000004;
 } // namespace cuslide::tiff
 
 #endif // CUSLIDE_TIFF_CONSTANTS_H
-
