@@ -1,16 +1,8 @@
 #
-# Copyright (c) 2020-2025, NVIDIA CORPORATION.
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# cmake-format: off
+# SPDX-FileCopyrightText: Copyright (c) 2020-2025, NVIDIA CORPORATION.
+# SPDX-License-Identifier: Apache-2.0
+# cmake-format: on
 #
 
 if (NOT TARGET deps::nvimgcodec)
@@ -21,9 +13,9 @@ if (NOT TARGET deps::nvimgcodec)
     # Automatic installation logic
     if(AUTO_INSTALL_NVIMGCODEC)
         message(STATUS "Configuring automatic nvImageCodec installation...")
-        
+
         # Try to find micromamba or conda in various locations
-        find_program(MICROMAMBA_EXECUTABLE 
+        find_program(MICROMAMBA_EXECUTABLE
             NAMES micromamba
             PATHS ${CMAKE_CURRENT_SOURCE_DIR}/../../../bin
                   ${CMAKE_CURRENT_SOURCE_DIR}/../../bin
@@ -35,8 +27,8 @@ if (NOT TARGET deps::nvimgcodec)
                   /opt/miniconda/bin
             DOC "Path to micromamba executable"
         )
-        
-        find_program(CONDA_EXECUTABLE 
+
+        find_program(CONDA_EXECUTABLE
             NAMES conda mamba
             PATHS $ENV{HOME}/miniconda3/bin
                   $ENV{HOME}/anaconda3/bin
@@ -45,7 +37,7 @@ if (NOT TARGET deps::nvimgcodec)
                   /usr/local/bin
             DOC "Path to conda/mamba executable"
         )
-        
+
         # Determine which conda tool to use
         set(CONDA_CMD "")
         set(CONDA_TYPE "")
@@ -58,7 +50,7 @@ if (NOT TARGET deps::nvimgcodec)
             set(CONDA_TYPE "conda")
             message(STATUS "Found conda/mamba: ${CONDA_EXECUTABLE}")
         endif()
-        
+
         if(CONDA_CMD)
             # Check if nvImageCodec is already installed
             message(STATUS "Checking for existing nvImageCodec installation...")
@@ -68,17 +60,17 @@ if (NOT TARGET deps::nvimgcodec)
                 OUTPUT_VARIABLE NVIMGCODEC_CHECK_OUTPUT
                 ERROR_QUIET
             )
-            
+
             # Parse version from output if installed
             set(NVIMGCODEC_INSTALLED_VERSION "")
             if(NVIMGCODEC_CHECK_RESULT EQUAL 0)
-                string(REGEX MATCH "libnvimgcodec-dev[ ]+([0-9]+\\.[0-9]+\\.[0-9]+)" 
+                string(REGEX MATCH "libnvimgcodec-dev[ ]+([0-9]+\\.[0-9]+\\.[0-9]+)"
                        VERSION_MATCH "${NVIMGCODEC_CHECK_OUTPUT}")
                 if(CMAKE_MATCH_1)
                     set(NVIMGCODEC_INSTALLED_VERSION ${CMAKE_MATCH_1})
                 endif()
             endif()
-            
+
             # Install or upgrade if needed
             set(NEED_INSTALL FALSE)
             if(NOT NVIMGCODEC_CHECK_RESULT EQUAL 0)
@@ -90,27 +82,27 @@ if (NOT TARGET deps::nvimgcodec)
             else()
                 message(STATUS "nvImageCodec ${NVIMGCODEC_INSTALLED_VERSION} already installed (>= ${NVIMGCODEC_VERSION})")
             endif()
-            
+
             if(NEED_INSTALL)
                 # Install nvImageCodec with specific version
                 message(STATUS "Installing nvImageCodec ${NVIMGCODEC_VERSION} via ${CONDA_TYPE}...")
                 execute_process(
-                    COMMAND ${CONDA_CMD} install 
-                        libnvimgcodec-dev=${NVIMGCODEC_VERSION} 
-                        libnvimgcodec0=${NVIMGCODEC_VERSION} 
+                    COMMAND ${CONDA_CMD} install
+                        libnvimgcodec-dev=${NVIMGCODEC_VERSION}
+                        libnvimgcodec0=${NVIMGCODEC_VERSION}
                         -c conda-forge -y
                     RESULT_VARIABLE CONDA_INSTALL_RESULT
                     OUTPUT_VARIABLE CONDA_INSTALL_OUTPUT
                     ERROR_VARIABLE CONDA_INSTALL_ERROR
                     TIMEOUT 300  # 5 minute timeout
                 )
-                
+
                 if(CONDA_INSTALL_RESULT EQUAL 0)
                     message(STATUS "✓ Successfully installed nvImageCodec ${NVIMGCODEC_VERSION}")
                 else()
                     message(WARNING "✗ Failed to install nvImageCodec via ${CONDA_TYPE}")
                     message(WARNING "Error: ${CONDA_INSTALL_ERROR}")
-                    
+
                     # Try alternative installation without version constraint
                     message(STATUS "Attempting installation without version constraint...")
                     execute_process(
@@ -119,7 +111,7 @@ if (NOT TARGET deps::nvimgcodec)
                         OUTPUT_QUIET
                         ERROR_QUIET
                     )
-                    
+
                     if(CONDA_FALLBACK_RESULT EQUAL 0)
                         message(STATUS "✓ Fallback installation successful")
                     else()
@@ -144,7 +136,7 @@ if (NOT TARGET deps::nvimgcodec)
         # Manual detection in various environments
         set(NVIMGCODEC_LIB_PATH "")
         set(NVIMGCODEC_INCLUDE_PATH "")
-        
+
         # Try conda environment detection (both Python packages and native packages)
         if(DEFINED ENV{CONDA_BUILD})
             # Conda build environment
@@ -188,7 +180,7 @@ if (NOT TARGET deps::nvimgcodec)
                     OUTPUT_STRIP_TRAILING_WHITESPACE
                     ERROR_QUIET
                 )
-                
+
                 if(PYTHON_SITE_PACKAGES)
                     set(NVIMGCODEC_PYTHON_ROOT "${PYTHON_SITE_PACKAGES}/nvidia/nvimgcodec")
                     if(EXISTS "${NVIMGCODEC_PYTHON_ROOT}/include/nvimgcodec.h")
@@ -201,7 +193,7 @@ if (NOT TARGET deps::nvimgcodec)
                     endif()
                 endif()
             endif()
-            
+
             # System-wide installation fallback
             if(NOT NVIMGCODEC_LIB_PATH)
                 if(EXISTS /usr/lib/x86_64-linux-gnu/libnvimgcodec.so.0)
