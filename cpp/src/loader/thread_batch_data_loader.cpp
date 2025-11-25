@@ -135,7 +135,7 @@ uint32_t ThreadBatchDataLoader::request(uint32_t load_size)
     fmt::print("🔍 request(): ENTRY - num_workers_={}, load_size={}, queued_item_count_={}\n",
               num_workers_, load_size, queued_item_count_);
 #endif // DEBUG
-    
+
     if (num_workers_ == 0)
     {
 #ifdef DEBUG
@@ -153,7 +153,7 @@ uint32_t ThreadBatchDataLoader::request(uint32_t load_size)
 #ifdef DEBUG
     fmt::print("🔍 request(): Will request {} items\n", num_items_to_request);
 #endif // DEBUG
-    
+
     for (uint32_t i = 0; i < num_items_to_request; ++i)
     {
         uint32_t last_item_count = 0;
@@ -188,7 +188,7 @@ uint32_t ThreadBatchDataLoader::wait_batch()
     fmt::print("🔍 wait_batch(): ENTRY - num_workers_={}, batch_item_counts_.size()={}, tasks_.size()={}\n",
               num_workers_, batch_item_counts_.size(), tasks_.size());
 #endif // DEBUG
-    
+
     if (num_workers_ == 0)
     {
         return 0;
@@ -245,7 +245,7 @@ uint8_t* ThreadBatchDataLoader::next_data()
     fmt::print("🔍 next_data(): ENTRY - num_workers_={}, processed_batch_count_={}, location_len_={}\n",
               num_workers_, processed_batch_count_, location_len_);
 #endif // DEBUG
-    
+
     if (num_workers_ == 0) // (location_len == 1 && batch_size == 1)
     {
 #ifdef DEBUG
@@ -362,7 +362,7 @@ bool ThreadBatchDataLoader::enqueue(std::function<void()> task, const TileInfo& 
               num_workers_, tile.location_index, tile.index);
     fflush(stdout);
 #endif // DEBUG
-    
+
     if (num_workers_ > 0)
     {
 #ifdef DEBUG

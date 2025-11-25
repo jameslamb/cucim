@@ -161,7 +161,7 @@ private:
      * @brief Check if the specified image format is supported or not.
      */
     bool is_format_supported() const;
-    
+
 #ifdef CUCIM_HAS_NVIMGCODEC
     /**
      * @brief Parse codec string to TIFF compression code

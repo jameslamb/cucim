@@ -43,36 +43,36 @@ IFD::IFD(TIFF* tiff, uint16_t index, ifd_offset_t offset) : tiff_(tiff), ifd_ind
         if (static_cast<uint32_t>(index) < tiff->nvimgcodec_parser_->get_ifd_count())
         {
             const auto& ifd_info = tiff->nvimgcodec_parser_->get_ifd(static_cast<uint32_t>(index));
-            
+
             // Initialize from IfdInfo
             width_ = ifd_info.width;
             height_ = ifd_info.height;
             samples_per_pixel_ = ifd_info.num_channels;
             bits_per_sample_ = ifd_info.bits_per_sample;
-            
+
             // Parse codec to compression
             compression_ = parse_codec_to_compression(ifd_info.codec);
             codec_name_ = ifd_info.codec;
-            
+
             // Assume tiled if tile dimensions are provided in IfdInfo (check nvImageCodec metadata)
             // For now, use a heuristic: most whole-slide images are tiled
             tile_width_ = 256;  // Default tile size (can be overridden from IfdInfo metadata)
             tile_height_ = 256;
-            
+
             // nvImageCodec members
             nvimgcodec_sub_stream_ = ifd_info.sub_code_stream;
-            
+
             // Calculate hash value
             hash_value_ = tiff->file_handle_shared_.get()->hash_value ^ cucim::codec::splitmix64(index);
-            
+
             #ifdef DEBUG
-            fmt::print("  IFD[{}]: Initialized from nvImageCodec ({}x{}, codec: {})\n", 
+            fmt::print("  IFD[{}]: Initialized from nvImageCodec ({}x{}, codec: {})\n",
                       index, width_, height_, codec_name_);
             #endif
             return;
         }
     }
-    
+
     // Fallback: throw error if nvImageCodec parser not available
     throw std::runtime_error(fmt::format(
         "IFD constructor (offset-based) requires libtiff, which is not available in pure nvImageCodec build. "
@@ -92,38 +92,38 @@ IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_in
     : tiff_(tiff), ifd_index_(index), ifd_offset_(index)
 {
     PROF_SCOPED_RANGE(PROF_EVENT(ifd_ifd));  // Use standard ifd_ifd profiler event
-    
+
     #ifdef DEBUG
     fmt::print("🔧 Creating IFD[{}] from nvImageCodec metadata\n", index);
     #endif
-    
+
     // Extract basic image properties from IfdInfo
     width_ = ifd_info.width;
     height_ = ifd_info.height;
     samples_per_pixel_ = ifd_info.num_channels;
     bits_per_sample_ = ifd_info.bits_per_sample;
-    
+
     #ifdef DEBUG
     fmt::print("   Dimensions: {}x{}, {} channels, {} bits/sample\n",
               width_, height_, samples_per_pixel_, bits_per_sample_);
     #endif
-    
+
     // Parse codec string to compression enum
     codec_name_ = ifd_info.codec;
     compression_ = parse_codec_to_compression(codec_name_);
     #ifdef DEBUG
     fmt::print("   Codec: {} (compression={})\n", codec_name_, compression_);
     #endif
-    
+
     // Get ImageDescription from nvImageCodec
     image_description_ = ifd_info.image_description;
-    
+
     // Extract TIFF tags from TiffFileParser
     if (tiff->nvimgcodec_parser_) {
         // Software and Model tags
         software_ = tiff->nvimgcodec_parser_->get_tiff_tag(index, "Software");
         model_ = tiff->nvimgcodec_parser_->get_tiff_tag(index, "Model");
-        
+
         // SUBFILETYPE for IFD classification
         int subfile_type = tiff->nvimgcodec_parser_->get_subfile_type(index);
         if (subfile_type >= 0) {
@@ -132,7 +132,7 @@ IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_in
             fmt::print("   SUBFILETYPE: {}\n", subfile_type_);
             #endif
         }
-        
+
         // Check for JPEGTables (abbreviated JPEG indicator)
         std::string jpeg_tables = tiff->nvimgcodec_parser_->get_tiff_tag(index, "JPEGTables");
         if (!jpeg_tables.empty()) {
@@ -140,11 +140,11 @@ IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_in
             fmt::print("   ✅ JPEGTables detected (abbreviated JPEG)\n");
             #endif
         }
-        
+
         // Tile dimensions (if available from TIFF tags)
         std::string tile_w_str = tiff->nvimgcodec_parser_->get_tiff_tag(index, "TileWidth");
         std::string tile_h_str = tiff->nvimgcodec_parser_->get_tiff_tag(index, "TileLength");
-        
+
         if (!tile_w_str.empty() && !tile_h_str.empty()) {
             try {
                 tile_width_ = std::stoul(tile_w_str);
@@ -168,29 +168,29 @@ IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_in
             #endif
         }
     }
-    
+
     // Set format defaults
     planar_config_ = PLANARCONFIG_CONTIG;  // nvImageCodec outputs interleaved
     photometric_ = PHOTOMETRIC_RGB;
     predictor_ = 1;  // No predictor
-    
+
     // Resolution info (defaults - may not be available from nvImageCodec)
     resolution_unit_ = 1;  // No absolute unit
     x_resolution_ = 1.0f;
     y_resolution_ = 1.0f;
-    
+
     // Calculate hash for caching
     hash_value_ = cucim::codec::splitmix64(index);
-    
+
 #ifdef CUCIM_HAS_NVIMGCODEC
     // Store reference to nvImageCodec sub-stream
     nvimgcodec_sub_stream_ = ifd_info.sub_code_stream;
     #ifdef DEBUG
-    fmt::print("   ✅ nvImageCodec sub-stream: {}\n", 
+    fmt::print("   ✅ nvImageCodec sub-stream: {}\n",
               static_cast<void*>(nvimgcodec_sub_stream_));
     #endif
 #endif
-    
+
     #ifdef DEBUG
     fmt::print("✅ IFD[{}] initialization complete\n", index);
     #endif
@@ -203,11 +203,11 @@ IFD::~IFD()
     // NOTE: nvimgcodec_sub_stream_ is NOT owned by IFD - it's owned by TiffFileParser
     // TiffFileParser::~TiffFileParser() will destroy all sub-code streams
     // DO NOT call nvimgcodecCodeStreamDestroy here to avoid double-free or use-after-free
-    // 
+    //
     // The destruction order in TIFF is:
     // 1. nvimgcodec_parser_ destroyed → TiffFileParser destroys sub-code streams
     // 2. ifds_ destroyed → IFD destructors run (we're here)
-    // 
+    //
     // By this point, sub-code streams are already destroyed, so we just clear the pointer
     nvimgcodec_sub_stream_ = nullptr;
 #endif
@@ -219,7 +219,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                [[maybe_unused]] cucim::io::format::ImageDataDesc* out_image_data)
 {
     PROF_SCOPED_RANGE(PROF_EVENT(ifd_read));
-    
+
     #ifdef DEBUG
     fmt::print("🎯 IFD::read() ENTRY: IFD[{}], location=({}, {}), size={}x{}, device={}\n",
               ifd_index_,
@@ -227,12 +227,12 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
               request->size[0], request->size[1],
               request->device);
     #endif
-    
+
 #ifdef CUCIM_HAS_NVIMGCODEC
     // Fast path: Use nvImageCodec ROI decoding when available
     // ROI decoding is supported in nvImageCodec v0.6.0+ for JPEG2000
     // Falls back to tile-based decoding if ROI decode fails
-    if (nvimgcodec_sub_stream_ && tiff->nvimgcodec_parser_ && 
+    if (nvimgcodec_sub_stream_ && tiff->nvimgcodec_parser_ &&
         request->location_len == 1 && request->batch_size == 1)
     {
         std::string device_name(request->device);
@@ -241,17 +241,17 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
             device_name = device_name + fmt::format("[{}]", request->shm_name);
         }
         cucim::io::Device out_device(device_name);
-        
+
         int64_t sx = request->location[0];
         int64_t sy = request->location[1];
         int64_t w = request->size[0];
         int64_t h = request->size[1];
-        
+
         // Allocate output buffer
         uint8_t* output_buffer = nullptr;
         DLTensor* out_buf = request->buf;
         bool is_buf_available = out_buf && out_buf->data;
-        
+
         if (is_buf_available)
         {
             output_buffer = static_cast<uint8_t*>(out_buf->data);
@@ -260,7 +260,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
         {
             // Allocate memory based on device type
             size_t buffer_size = w * h * samples_per_pixel_;
-            
+
             if (out_device.type() == cucim::io::DeviceType::kCUDA)
             {
                 // Allocate CUDA device memory
@@ -269,7 +269,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                 if (cuda_status != cudaSuccess)
                 {
                     #ifdef DEBUG
-                    fmt::print(stderr, "[Error] Failed to allocate CUDA memory: {}\n", 
+                    fmt::print(stderr, "[Error] Failed to allocate CUDA memory: {}\n",
                               cudaGetErrorString(cuda_status));
                     #endif
                     return false;
@@ -289,24 +289,24 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                 }
             }
         }
-        
+
         // Get IFD info from TiffFileParser
         const auto& ifd_info = tiff->nvimgcodec_parser_->get_ifd(static_cast<uint32_t>(ifd_index_));
-        
+
         // Call nvImageCodec ROI decoder
         bool success = cuslide2::nvimgcodec::decode_ifd_region_nvimgcodec(
-            ifd_info, 
+            ifd_info,
             tiff->nvimgcodec_parser_->get_main_code_stream(),
             sx, sy, w, h,
             &output_buffer,
             out_device);
-        
+
         if (success)
         {
             #ifdef DEBUG
             fmt::print("✅ nvImageCodec ROI decode successful: {}x{} at ({}, {})\n", w, h, sx, sy);
             #endif
-            
+
             // Set up output metadata
             out_image_data->container.data = output_buffer;
             out_image_data->container.device = DLDevice{ static_cast<DLDeviceType>(out_device.type()), out_device.index() };
@@ -318,7 +318,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
             out_image_data->container.shape[2] = samples_per_pixel_;
             out_image_data->container.strides = nullptr;
             out_image_data->container.byte_offset = 0;
-            
+
             return true;
         }
         else
@@ -327,7 +327,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
             #ifdef DEBUG
             fmt::print("❌ nvImageCodec ROI decode failed for IFD[{}]\n", ifd_index_);
             #endif
-            
+
             // Free allocated buffer on failure
             if (!is_buf_available && output_buffer)
             {
@@ -340,14 +340,14 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                     cucim_free(output_buffer);
                 }
             }
-            
+
             throw std::runtime_error(fmt::format(
-                "Failed to decode IFD[{}] with nvImageCodec. ROI: ({},{}) {}x{}", 
+                "Failed to decode IFD[{}] with nvImageCodec. ROI: ({},{}) {}x{}",
                 ifd_index_, sx, sy, w, h));
         }
     }
 #endif
-    
+
     // If we reach here, nvImageCodec is not available or request doesn't match fast path
     #ifdef DEBUG
     fmt::print("❌ Cannot decode: nvImageCodec not available or unsupported request type\n");
@@ -362,11 +362,11 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
     throw std::runtime_error(fmt::format(
         "IFD[{}]: This library requires nvImageCodec for image decoding. "
         "Multi-location/batch requests not yet supported.", ifd_index_));
-    
+
     // OLD TILE-BASED CODE BELOW - REMOVED
     // All the code below this point (lines 335-1573) can be deleted
     // Keeping it commented for reference during transition
-    
+
 #if 0  // DISABLED - Old libtiff tile-based code
     ::TIFF* tif = tiff->tiff_client_;
 
@@ -402,7 +402,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
     }
 
     fmt::print("🔎 Checking is_read_optimizable(): {}\n", is_read_optimizable());
-    
+
     if (is_read_optimizable())
     {
         fmt::print("✅ Using optimized read path\n");
@@ -412,12 +412,12 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
         }
         int64_t* location = request->location;
         uint64_t location_len = request->location_len;
-        
+
         // TEMPORARY: Force synchronous execution to avoid thread pool issues
         const uint32_t num_workers = 0;  // Was: request->num_workers;
         fmt::print("⚠️  FORCED num_workers=0 for synchronous execution (debugging)\n");
         fflush(stdout);
-        
+
         const bool drop_last = request->drop_last;
         uint32_t prefetch_factor = request->prefetch_factor;
         const bool shuffle = request->shuffle;
@@ -463,7 +463,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
         fmt::print("📍 BUFFER_SIZE: w={}, h={}, samples_per_pixel={}\n", w, h, samples_per_pixel_);
         fmt::print("📍 BUFFER_SIZE: one_raster_size={} bytes ({} KB)\n", one_raster_size, one_raster_size / 1024);
         fmt::print("📍 BUFFER_SIZE: total raster_size={} bytes ({} KB)\n", raster_size, raster_size / 1024);
-        
+
         if (location_len > 1 || batch_size > 1 || num_workers > 0)
         {
             fmt::print("📍 Entering multi-location/batch/worker path\n");
@@ -505,12 +505,12 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
 
             // Set raster_type to CUDA because loader will handle this with nvjpeg
             // BUT: NvJpegProcessor only handles JPEG (not JPEG2000), so check compression
-            fmt::print("📍 Checking device type: {} compression: {}\n", 
+            fmt::print("📍 Checking device type: {} compression: {}\n",
                       static_cast<int>(out_device.type()), compression_);
-            
-            bool is_jpeg2000 = (compression_ == COMPRESSION_APERIO_JP2K_YCBCR || 
+
+            bool is_jpeg2000 = (compression_ == COMPRESSION_APERIO_JP2K_YCBCR ||
                                compression_ == COMPRESSION_APERIO_JP2K_RGB);
-            
+
             if (out_device.type() == cucim::io::DeviceType::kCUDA && !is_jpeg2000)
             {
                 fmt::print("📍 Using CUDA device path with nvjpeg loader\n");
@@ -549,7 +549,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                 fmt::print("⚠️  JPEG2000 detected - skipping NvJpegProcessor (will use nvImageCodec/OpenJPEG)\n");
             }
 
-            fmt::print("📍 Creating ThreadBatchDataLoader (location_len={}, batch_size={}, num_workers={})\n", 
+            fmt::print("📍 Creating ThreadBatchDataLoader (location_len={}, batch_size={}, num_workers={})\n",
                       location_len, batch_size, num_workers);
             auto loader = std::make_unique<cucim::loader::ThreadBatchDataLoader>(
                 load_func, std::move(batch_processor), out_device, std::move(request_location), std::move(request_size),
@@ -852,7 +852,7 @@ uint16_t IFD::parse_codec_to_compression(const std::string& codec)
     if (codec == "none" || codec == "uncompressed" || codec.empty()) {
         return COMPRESSION_NONE;  // 1
     }
-    
+
     // Handle generic 'tiff' codec from nvImageCodec 0.6.0
     // This is a known limitation where nvImageCodec doesn't expose the actual compression
     // For now, default to JPEG which is most common in whole-slide imaging
@@ -862,7 +862,7 @@ uint16_t IFD::parse_codec_to_compression(const std::string& codec)
         #endif
         return COMPRESSION_JPEG;  // 7 - Most common for WSI (Aperio, Philips, etc.)
     }
-    
+
     // Unknown codec - log warning and default to JPEG (safer than NONE for WSI)
     #ifdef DEBUG
     fmt::print("⚠️  Unknown codec '{}', defaulting to COMPRESSION_JPEG\n", codec);
@@ -1013,11 +1013,11 @@ bool IFD::read_region_tiles(const TIFF* tiff,
             fmt::print("🔍 read_region_tiles: About to create decode_func lambda\n");
             fflush(stdout);
             #endif
-            
+
             // Capture device type as integer to avoid copying Device object
             auto device_type_int = static_cast<int>(out_device.type());
             auto device_index = out_device.index();
-            
+
             // Create a struct to hold all data - avoids large lambda captures
             struct TileDecodeData {
                 uint32_t index;
@@ -1043,7 +1043,7 @@ bool IFD::read_region_tiles(const TIFF* tiff,
                 int16_t device_index;
                 cucim::loader::ThreadBatchDataLoader* loader;
             };
-            
+
             auto data = std::make_shared<TileDecodeData>();
             data->index = index;
             data->index_hash = index_hash;
@@ -1073,7 +1073,7 @@ bool IFD::read_region_tiles(const TIFF* tiff,
             data->device_type_int = device_type_int;
             data->device_index = device_index;
             data->loader = loader;
-            
+
             // Small lambda that only captures shared_ptr - cheap to copy!
             auto decode_func = [data]() {
                 // FIRST THING - print before ANY other code
@@ -1081,7 +1081,7 @@ bool IFD::read_region_tiles(const TIFF* tiff,
                 fmt::print("🔍🔍🔍 decode_func: LAMBDA INVOKED! index={}\n", data->index);
                 fflush(stdout);
                 #endif
-                
+
                 // Extract all data to local variables to avoid repeated data-> access
                 auto index = data->index;
                 auto index_hash = data->index_hash;
@@ -1111,17 +1111,17 @@ bool IFD::read_region_tiles(const TIFF* tiff,
                 // auto predictor = data->predictor;
                 auto background_value = data->background_value;
                 auto loader = data->loader;
-                
+
                 // Reconstruct Device object inside lambda to avoid copying issues
                 cucim::io::Device out_device(static_cast<cucim::io::DeviceType>(data->device_type_int), data->device_index);
                 try {
                     #ifdef DEBUG
-                    fmt::print("🔍 decode_func: START - index={}, compression={}, tiledata_offset={}, tiledata_size={}\n", 
+                    fmt::print("🔍 decode_func: START - index={}, compression={}, tiledata_offset={}, tiledata_size={}\n",
                               index, compression_method, tiledata_offset, tiledata_size);
                     fflush(stdout);
                     #endif
                     PROF_SCOPED_RANGE(PROF_EVENT_P(ifd_read_region_tiles_task, index_hash));
-                    
+
                     // Get image cache directly instead of capturing by reference
                     #ifdef DEBUG
                     fmt::print("🔍 decode_func: Getting image cache...\n");
@@ -1132,7 +1132,7 @@ bool IFD::read_region_tiles(const TIFF* tiff,
                     fmt::print("🔍 decode_func: Got image cache\n");
                     fflush(stdout);
                     #endif
-                    
+
                     uint32_t nbytes_tile_index = (tile_pixel_offset_sy * tw + tile_pixel_offset_x) * samples_per_pixel;
                     uint32_t dest_pixel_index = dest_pixel_index_x;
                     uint8_t* tile_data = nullptr;
@@ -1253,10 +1253,10 @@ bool IFD::read_region_tiles(const TIFF* tiff,
             #ifdef DEBUG
             fmt::print("🔍 read_region_tiles: decode_func lambda created\n");
             #endif
-            
+
             // TEMPORARY: Force single-threaded execution to test if decode works
             bool force_single_threaded = true;
-            
+
             if (force_single_threaded || !loader || !(*loader))
             {
                 #ifdef DEBUG
@@ -1479,15 +1479,15 @@ bool IFD::read_region_tiles_boundary(const TIFF* tiff,
                 fmt::print("🔍🔍🔍 decode_func_boundary: LAMBDA INVOKED! index={}\n", index);
                 fflush(stdout);
                 #endif
-                
+
                 // Reconstruct Device object inside lambda
                 cucim::io::Device out_device(static_cast<cucim::io::DeviceType>(device_type_int), device_index);
-                
+
                 PROF_SCOPED_RANGE(PROF_EVENT_P(ifd_read_region_tiles_boundary_task, index_hash));
-                
+
                 // Get image cache directly instead of capturing by reference
                 cucim::cache::ImageCache& image_cache = cucim::CuImage::cache_manager().cache();
-                
+
                 uint32_t nbytes_tile_index = nbytes_tile_index_orig;
                 uint32_t dest_pixel_index = dest_pixel_index_orig;
 
@@ -1671,7 +1671,7 @@ bool IFD::read_region_tiles_boundary(const TIFF* tiff,
                                       nbytes_tile_pixel_size_x, nbytes_tw);
                             fmt::print("🔍 MEMCPY_DETAILED: tile_data={}\n", static_cast<void*>(tile_data));
                             #endif
-                            
+
                             // Calculate total buffer size needed
                             uint32_t num_rows = tile_pixel_offset_ey - tile_pixel_offset_sy + 1;
                             [[maybe_unused]] size_t total_dest_size_needed = dest_pixel_index + (num_rows - 1) * dest_pixel_step_y + nbytes_tile_pixel_size_x;
@@ -1679,7 +1679,7 @@ bool IFD::read_region_tiles_boundary(const TIFF* tiff,
                             fmt::print("🔍 MEMCPY_DETAILED: num_rows={}, total_dest_size_needed={}\n",
                                       num_rows, total_dest_size_needed);
                             #endif
-                            
+
                             for (uint32_t ty = tile_pixel_offset_sy; ty <= tile_pixel_offset_ey;
                                  ++ty, dest_pixel_index += dest_pixel_step_y, nbytes_tile_index += nbytes_tw)
                             {
@@ -1691,10 +1691,10 @@ bool IFD::read_region_tiles_boundary(const TIFF* tiff,
                                           static_cast<void*>(tile_data + nbytes_tile_index));
                                 fflush(stdout);
                                 #endif
-                                
+
                                 memcpy(dest_start_ptr + dest_pixel_index, tile_data + nbytes_tile_index,
                                        nbytes_tile_pixel_size_x);
-                                
+
                                 #ifdef DEBUG
                                 fmt::print("🔍 MEMCPY_ROW ty={}: SUCCESS\n", ty);
                                 fflush(stdout);

@@ -43,13 +43,13 @@ public:
     TIFF(const cucim::filesystem::Path& file_path, uint64_t read_config);
     static std::shared_ptr<TIFF> open(const cucim::filesystem::Path& file_path);
     static std::shared_ptr<TIFF> open(const cucim::filesystem::Path& file_path, uint64_t config);
-    
+
     // Legacy libtiff-style constructors (for compatibility if needed)
     TIFF(const cucim::filesystem::Path& file_path, int mode);
     TIFF(const cucim::filesystem::Path& file_path, int mode, uint64_t config);
     static std::shared_ptr<TIFF> open(const cucim::filesystem::Path& file_path, int mode);
     static std::shared_ptr<TIFF> open(const cucim::filesystem::Path& file_path, int mode, uint64_t config);
-    
+
     void close();
     void construct_ifds();
 
