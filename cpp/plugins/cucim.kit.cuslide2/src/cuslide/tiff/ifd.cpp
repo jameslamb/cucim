@@ -88,6 +88,7 @@ IFD::IFD(TIFF* tiff, uint16_t index, ifd_offset_t offset) : tiff_(tiff), ifd_ind
 // NEW PRIMARY CONSTRUCTOR: nvImageCodec-Only (No libtiff)
 // ============================================================================
 
+#ifdef CUCIM_HAS_NVIMGCODEC
 IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_info)
     : tiff_(tiff), ifd_index_(index), ifd_offset_(index)
 {
@@ -175,6 +176,7 @@ IFD::IFD(TIFF* tiff, uint16_t index, const cuslide2::nvimgcodec::IfdInfo& ifd_in
     
     fmt::print("✅ IFD[{}] initialization complete\n", index);
 }
+#endif // CUCIM_HAS_NVIMGCODEC
 
 IFD::~IFD()
 {
@@ -192,10 +194,10 @@ IFD::~IFD()
 #endif
 }
 
-bool IFD::read(const TIFF* tiff,
+bool IFD::read([[maybe_unused]] const TIFF* tiff,
                [[maybe_unused]] const cucim::io::format::ImageMetadataDesc* metadata,
                const cucim::io::format::ImageReaderRegionRequestDesc* request,
-               cucim::io::format::ImageDataDesc* out_image_data)
+               [[maybe_unused]] cucim::io::format::ImageDataDesc* out_image_data)
 {
     PROF_SCOPED_RANGE(PROF_EVENT(ifd_read));
     
@@ -318,8 +320,13 @@ bool IFD::read(const TIFF* tiff,
     
     // If we reach here, nvImageCodec is not available or request doesn't match fast path
     fmt::print("❌ Cannot decode: nvImageCodec not available or unsupported request type\n");
+#ifdef CUCIM_HAS_NVIMGCODEC
     fmt::print("   nvimgcodec_sub_stream_={}, location_len={}, batch_size={}\n",
               static_cast<void*>(nvimgcodec_sub_stream_), request->location_len, request->batch_size);
+#else
+    fmt::print("   location_len={}, batch_size={}\n",
+              request->location_len, request->batch_size);
+#endif
     throw std::runtime_error(fmt::format(
         "IFD[{}]: This library requires nvImageCodec for image decoding. "
         "Multi-location/batch requests not yet supported.", ifd_index_));
@@ -790,6 +797,7 @@ size_t IFD::tile_raster_size_nbytes() const
 // Helper: Parse nvImageCodec Codec String to TIFF Compression Enum
 // ============================================================================
 
+#ifdef CUCIM_HAS_NVIMGCODEC
 uint16_t IFD::parse_codec_to_compression(const std::string& codec)
 {
     // Map nvImageCodec codec strings to TIFF compression constants
@@ -829,6 +837,7 @@ uint16_t IFD::parse_codec_to_compression(const std::string& codec)
     #endif
     return COMPRESSION_JPEG;  // 7 - WSI files rarely use uncompressed
 }
+#endif // CUCIM_HAS_NVIMGCODEC
 
 bool IFD::is_compression_supported() const
 {
