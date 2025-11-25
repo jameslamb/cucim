@@ -638,7 +638,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                 fmt::print("  ✅ Extracted Aperio ImageDescription ({} bytes)\n", buffer_size);
                 #endif
             }
-            else if (kind == 2)  // MED_PHILIPS = 2
+            else if (kind == 2 && ifd_info.image_description.empty())  // MED_PHILIPS = 2
             {
                 // Philips metadata is typically XML
                 ifd_info.image_description.assign(buffer, buffer + buffer_size);
@@ -652,7 +652,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                 }
                 #endif
             }
-            else if (kind == 3)  // MED_LEICA = 3 (but might be misclassified Aperio!)
+            else if (kind == 3 && ifd_info.image_description.empty())  // MED_LEICA = 3 (but might be misclassified Aperio!)
             {
                 // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Aperio as Leica
                 // Check if this is actually Aperio by looking for "Aperio Image Library" text
@@ -677,7 +677,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                     }
                 }
             }
-            else if (kind == 4)  // MED_VENTANA = 4 (but might be misclassified Philips!)
+            else if (kind == 4 && ifd_info.image_description.empty())  // MED_VENTANA = 4 (but might be misclassified Philips!)
             {
                 // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Philips as Ventana
                 // Check if this is actually Philips XML by looking for DataObject/DPUfsImport
