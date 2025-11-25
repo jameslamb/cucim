@@ -22,9 +22,6 @@
 #include <cucim/profiler/nvtx3.h>
 #include <cucim/util/cuda.h>
 
-// CPU decoder stubs (safety net for compilation - these throw errors if called)
-#include "cpu_decoder_stubs.h"
-
 // nvImageCodec handles ALL decoding (JPEG, JPEG2000, deflate, LZW, raw)
 #include "cuslide/nvimgcodec/nvimgcodec_decoder.h"
 #include "cuslide/nvimgcodec/nvimgcodec_tiff_parser.h"

@@ -15,7 +15,6 @@
 #include <nlohmann/json.hpp>
 #include <pugixml.hpp>
 #include "tiff_constants.h"
-#include "cpu_decoder_stubs.h"  // Stubs for legacy CPU decoder references
 
 #include <cucim/codec/base64.h>
 #include <cucim/logger/timer.h>
