@@ -385,12 +385,16 @@ enum class ImageType {
     UNKNOWN
 };
 
+<<<<<<< HEAD
 struct IfdInfo {
     struct MetadataBlob {
         int format;
         std::vector<uint8_t> data;
     };
 };
+=======
+struct IfdInfo {};
+>>>>>>> origin/feature/nvimagecodec-v0.6.0
 
 class TiffFileParser
 {
@@ -403,6 +407,7 @@ public:
         (void)index; 
         throw std::runtime_error("nvImageCodec not available"); 
     }
+<<<<<<< HEAD
     
     // Stub methods for API compatibility
     const std::map<int, IfdInfo::MetadataBlob>& get_metadata_blobs(uint32_t ifd_index) const
@@ -429,6 +434,8 @@ public:
         (void)ifd_index;
         return -1;
     }
+=======
+>>>>>>> origin/feature/nvimagecodec-v0.6.0
 };
 
 class NvImageCodecTiffParserManager
