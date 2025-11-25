@@ -142,13 +142,13 @@ def test_aperio_svs(svs_path, plugin_lib):
         try:
             # GPU
             start = time.time()
-            gpu_large = img.read_region([0, 0], [2048, 2048], 0, device="cuda")
+            _ = img.read_region([0, 0], [2048, 2048], 0, device="cuda")
             gpu_large_time = time.time() - start
             print(f"  GPU: {gpu_large_time:.4f}s")
 
             # CPU
             start = time.time()
-            cpu_large = img.read_region([0, 0], [2048, 2048], 0, device="cpu")
+            _ = img.read_region([0, 0], [2048, 2048], 0, device="cpu")
             cpu_large_time = time.time() - start
             print(f"  CPU: {cpu_large_time:.4f}s")
 
