@@ -105,8 +105,9 @@ public:
         }
         else
         {
-            buffer_ = malloc(size);
-            return buffer_ != nullptr;
+            // Use pinned memory for faster GPU-to-host transfers when GPU backend is used
+            cudaError_t status = cudaMallocHost(&buffer_, size);
+            return status == cudaSuccess;
         }
     }
 
@@ -117,7 +118,7 @@ public:
             if (is_device_)
                 cudaFree(buffer_);
             else
-                free(buffer_);
+                cudaFreeHost(buffer_);  // Pinned memory must use cudaFreeHost
             buffer_ = nullptr;
         }
     }

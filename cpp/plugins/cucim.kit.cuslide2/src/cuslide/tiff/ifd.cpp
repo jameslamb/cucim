@@ -247,48 +247,17 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
         int64_t w = request->size[0];
         int64_t h = request->size[1];
 
-        // Allocate output buffer
+        // Output buffer - decode function will allocate (uses pinned memory for CPU)
         uint8_t* output_buffer = nullptr;
         DLTensor* out_buf = request->buf;
         bool is_buf_available = out_buf && out_buf->data;
 
         if (is_buf_available)
         {
+            // User provided pre-allocated buffer
             output_buffer = static_cast<uint8_t*>(out_buf->data);
         }
-        else
-        {
-            // Allocate memory based on device type
-            size_t buffer_size = w * h * samples_per_pixel_;
-
-            if (out_device.type() == cucim::io::DeviceType::kCUDA)
-            {
-                // Allocate CUDA device memory
-                void* cuda_buffer = nullptr;
-                cudaError_t cuda_status = cudaMalloc(&cuda_buffer, buffer_size);
-                if (cuda_status != cudaSuccess)
-                {
-                    #ifdef DEBUG
-                    fmt::print(stderr, "[Error] Failed to allocate CUDA memory: {}\n",
-                              cudaGetErrorString(cuda_status));
-                    #endif
-                    return false;
-                }
-                output_buffer = static_cast<uint8_t*>(cuda_buffer);
-            }
-            else
-            {
-                // Allocate CPU memory
-                output_buffer = static_cast<uint8_t*>(cucim_malloc(buffer_size));
-                if (!output_buffer)
-                {
-                    #ifdef DEBUG
-                    fmt::print(stderr, "[Error] Failed to allocate CPU memory\n");
-                    #endif
-                    return false;
-                }
-            }
-        }
+        // Note: decode_ifd_region_nvimgcodec will allocate buffer if output_buffer is nullptr
 
         // Get IFD info from TiffFileParser
         const auto& ifd_info = tiff->nvimgcodec_parser_->get_ifd(static_cast<uint32_t>(ifd_index_));
@@ -329,6 +298,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
             #endif
 
             // Free allocated buffer on failure
+            // Note: decode function uses cudaMallocHost for CPU (pinned memory)
             if (!is_buf_available && output_buffer)
             {
                 if (out_device.type() == cucim::io::DeviceType::kCUDA)
@@ -337,7 +307,7 @@ bool IFD::read([[maybe_unused]] const TIFF* tiff,
                 }
                 else
                 {
-                    cucim_free(output_buffer);
+                    cudaFreeHost(output_buffer);  // Pinned memory
                 }
             }
 
