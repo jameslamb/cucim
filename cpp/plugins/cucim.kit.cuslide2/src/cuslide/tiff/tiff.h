@@ -92,7 +92,6 @@ public:
     //    static void operator delete[](void* ptr, std::size_t sz);
 
     // const values for read_configs_
-    static constexpr uint64_t kUseDirectJpegTurbo = 1;
     static constexpr uint64_t kUseLibTiff = 1 << 1;
 
     // Make IFD available to access private members of TIFF
@@ -102,8 +101,6 @@ private:
     // UPDATED: These now use nvImageCodec TiffFileParser instead of libtiff
     void _populate_philips_tiff_metadata(uint16_t ifd_count, void* metadata, std::shared_ptr<IFD>& first_ifd);
     void _populate_aperio_svs_metadata(uint16_t ifd_count, void* metadata, std::shared_ptr<IFD>& first_ifd);
-    void _parse_aperio_metadata_nvimgcodec(void* metadata);
-    void _parse_philips_metadata_nvimgcodec(void* metadata);
 
     cucim::filesystem::Path file_path_;
     std::shared_ptr<CuCIMFileHandle> file_handle_shared_;

@@ -96,9 +96,6 @@ public:
     size_t pixel_size_nbytes() const;
     size_t tile_raster_size_nbytes() const;
 
-    // Hidden methods for benchmarking
-    void write_offsets_(const char* file_path);
-
     // Make TIFF available to access private members of IFD
     friend class TIFF;
 
