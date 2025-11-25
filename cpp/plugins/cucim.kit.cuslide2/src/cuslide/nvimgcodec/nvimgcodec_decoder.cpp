@@ -54,12 +54,16 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
 {
     if (!main_code_stream)
     {
+        #ifdef DEBUG
         fmt::print("❌ Invalid main_code_stream\n");
+        #endif
         return false;
     }
     
+    #ifdef DEBUG
     fmt::print("🚀 Decoding IFD[{}] region: [{},{}] {}x{}, codec: {}\n",
               ifd_info.index, x, y, width, height, ifd_info.codec);
+    #endif
     
     try
     {
@@ -68,7 +72,9 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         auto& manager = NvImageCodecTiffParserManager::instance();
         if (!manager.is_available())
         {
+            #ifdef DEBUG
             fmt::print("❌ nvImageCodec TIFF parser manager not initialized\n");
+            #endif
             return false;
         }
         
@@ -79,7 +85,9 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         bool target_is_cpu = (device_str.find("cpu") != std::string::npos);
         
         nvimgcodecDecoder_t decoder = manager.get_decoder();  // Always use hybrid for ROI
+        #ifdef DEBUG
         fmt::print("  💡 Using hybrid decoder for ROI (nvTiff required for TIFF sub-regions)\n");
+        #endif
         
         // Step 1: Create view with ROI for this IFD
         nvimgcodecRegion_t region{};
@@ -109,8 +117,10 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         
         if (status != NVIMGCODEC_STATUS_SUCCESS)
         {
+            #ifdef DEBUG
             fmt::print("❌ Failed to create ROI sub-stream (status: {})\n",
                       static_cast<int>(status));
+            #endif
             return false;
         }
         
@@ -128,14 +138,18 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             buffer_kind = NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE;
             if (target_is_cpu)
             {
+                #ifdef DEBUG
                 fmt::print("  ℹ️  Will decode to GPU then copy to CPU (ROI requires nvTiff)\n");
+                #endif
             }
         }
         else
         {
             // No GPU available, try CPU buffer (may not work for TIFF ROI)
             buffer_kind = NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_HOST;
+            #ifdef DEBUG
             fmt::print("  ⚠️  No GPU available, attempting CPU buffer (may fail for TIFF ROI)\n");
+            #endif
         }
         
         // Step 3: Prepare output image info for the region
@@ -164,8 +178,10 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         output_image_info.buffer_size = buffer_size;
         output_image_info.cuda_stream = 0;
         
+        #ifdef DEBUG
         fmt::print("  Buffer: {}x{} RGB, stride={}, size={} bytes\n",
                   width, height, row_stride, buffer_size);
+        #endif
         
         // Step 4: Allocate output buffer
         void* buffer = nullptr;
@@ -174,23 +190,31 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             cudaError_t cuda_status = cudaMalloc(&buffer, buffer_size);
             if (cuda_status != cudaSuccess)
             {
+                #ifdef DEBUG
                 fmt::print("❌ Failed to allocate GPU memory: {}\n", 
                           cudaGetErrorString(cuda_status));
+                #endif
                 nvimgcodecCodeStreamDestroy(roi_stream);
                 return false;
             }
+            #ifdef DEBUG
             fmt::print("  Allocated GPU buffer\n");
+            #endif
         }
         else
         {
             buffer = malloc(buffer_size);
             if (!buffer)
             {
+                #ifdef DEBUG
                 fmt::print("❌ Failed to allocate host memory\n");
+                #endif
                 nvimgcodecCodeStreamDestroy(roi_stream);
                 return false;
             }
+            #ifdef DEBUG
             fmt::print("  Allocated CPU buffer\n");
+            #endif
         }
         
         output_image_info.buffer = buffer;
@@ -205,8 +229,10 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         
         if (status != NVIMGCODEC_STATUS_SUCCESS)
         {
+            #ifdef DEBUG
             fmt::print("❌ Failed to create image object (status: {})\n",
                       static_cast<int>(status));
+            #endif
             if (buffer_kind == NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE)
             {
                 cudaFree(buffer);
@@ -237,8 +263,10 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         
         if (status != NVIMGCODEC_STATUS_SUCCESS)
         {
+            #ifdef DEBUG
             fmt::print("❌ Failed to schedule decoding (status: {})\n",
                       static_cast<int>(status));
+            #endif
             nvimgcodecImageDestroy(image);
             if (buffer_kind == NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE)
             {
@@ -269,7 +297,9 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         // Step 9: Check decode status
         if (decode_status != NVIMGCODEC_PROCESSING_STATUS_SUCCESS)
         {
+            #ifdef DEBUG
             fmt::print("❌ Decoding failed (status: {})\n", static_cast<int>(decode_status));
+            #endif
             
             // Decoding failed - clean up and return error
             if (buffer_kind == NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE)
@@ -288,14 +318,18 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         if (target_is_cpu && buffer_kind == NVIMGCODEC_IMAGE_BUFFER_KIND_STRIDED_DEVICE)
         {
             // Successful GPU decode, now copy to CPU
+            #ifdef DEBUG
             fmt::print("✅ Successfully decoded IFD[{}] region\n", ifd_info.index);
             fmt::print("  📥 Copying decoded data from GPU to CPU...\n");
+            #endif
             
             void* gpu_buffer = buffer;
             buffer = malloc(buffer_size);
             if (!buffer)
             {
+                #ifdef DEBUG
                 fmt::print("❌ Failed to allocate CPU memory for copy\n");
+                #endif
                 cudaFree(gpu_buffer);
                 nvimgcodecCodeStreamDestroy(roi_stream);
                 return false;
@@ -306,17 +340,23 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             
             if (cuda_status != cudaSuccess)
             {
+                #ifdef DEBUG
                 fmt::print("❌ Failed to copy from GPU to CPU: {}\n", 
                           cudaGetErrorString(cuda_status));
+                #endif
                 free(buffer);
                 nvimgcodecCodeStreamDestroy(roi_stream);
                 return false;
             }
+            #ifdef DEBUG
             fmt::print("  ✅ GPU-to-CPU copy completed\n");
+            #endif
         }
         else
         {
+            #ifdef DEBUG
             fmt::print("✅ Successfully decoded IFD[{}] region\n", ifd_info.index);
+            #endif
         }
         
         // Clean up
@@ -324,13 +364,17 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         
         // Assign output buffer
         *output_buffer = reinterpret_cast<uint8_t*>(buffer);
+        #ifdef DEBUG
         fmt::print("✅ nvImageCodec ROI decode successful: {}x{} at ({}, {})\n", 
                   width, height, x, y);
+        #endif
         return true;
     }
     catch (const std::exception& e)
     {
+        #ifdef DEBUG
         fmt::print("❌ Exception in ROI decoding: {}\n", e.what());
+        #endif
         return false;
     }
 }

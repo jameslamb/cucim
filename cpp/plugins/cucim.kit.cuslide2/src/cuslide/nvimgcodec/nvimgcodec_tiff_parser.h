@@ -39,14 +39,6 @@ namespace cuslide2::nvimgcodec
  * Used to categorize IFDs as resolution levels or associated images
  * (particularly for formats like Aperio SVS that use SUBFILETYPE tags)
  */
-enum class ImageType {
-    RESOLUTION_LEVEL,  // Full or reduced resolution image
-    THUMBNAIL,         // Thumbnail image
-    LABEL,             // Slide label image
-    MACRO,             // Macro/overview image
-    UNKNOWN            // Unclassified
-};
-
 /**
  * @brief Information about a single IFD (Image File Directory) in a TIFF file
  * 
@@ -93,8 +85,6 @@ struct IfdInfo
     IfdInfo& operator=(const IfdInfo&) = delete;
     IfdInfo(IfdInfo&&) = default;
     IfdInfo& operator=(IfdInfo&&) = default;
-    
-    void print() const;
 };
 
 /**
@@ -268,18 +258,6 @@ private:
      * @param ifd_info IFD to extract TIFF tags for
      */
     void extract_tiff_tags(IfdInfo& ifd_info);
-    
-    /**
-     * @brief Classify an IFD by type (resolution level vs. associated image)
-     * 
-     * Internal helper method used by get_detected_format() for image classification.
-     * Parses ImageDescription metadata to determine image purpose using
-     * vendor-specific keywords (e.g., "label", "macro" for Aperio SVS).
-     * 
-     * @param ifd_index IFD index to classify
-     * @return ImageType classification
-     */
-    ImageType classify_ifd(uint32_t ifd_index) const;
     
     std::string file_path_;
     bool initialized_;

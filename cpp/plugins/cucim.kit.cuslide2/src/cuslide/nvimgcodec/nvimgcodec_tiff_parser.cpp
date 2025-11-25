@@ -37,18 +37,6 @@ namespace cuslide2::nvimgcodec
 #ifdef CUCIM_HAS_NVIMGCODEC
 
 // ============================================================================
-// IfdInfo Implementation
-// ============================================================================
-
-void IfdInfo::print() const
-{
-    #ifdef DEBUG
-    fmt::print("  IFD[{}]: {}x{}, {} channels, {} bits/sample, codec: {}\n",
-               index, width, height, num_channels, bits_per_sample, codec);
-    #endif // DEBUG
-}
-
-// ============================================================================
 // NvImageCodecTiffParserManager Implementation
 // ============================================================================
 
@@ -482,8 +470,6 @@ void TiffFileParser::parse_tiff_structure()
             }
         }
         
-        ifd_info.print();
-        
         ifd_infos_.push_back(std::move(ifd_info));
     }
     
@@ -752,85 +738,6 @@ const IfdInfo& TiffFileParser::get_ifd(uint32_t index) const
                                            index, ifd_infos_.size()));
     }
     return ifd_infos_[index];
-}
-
-// Internal helper for get_detected_format()
-ImageType TiffFileParser::classify_ifd(uint32_t ifd_index) const
-{
-    if (ifd_index >= ifd_infos_.size())
-    {
-        return ImageType::UNKNOWN;
-    }
-    
-    const auto& ifd = ifd_infos_[ifd_index];
-    const std::string& desc = ifd.image_description;
-    
-    // Aperio SVS classification based on ImageDescription keywords
-    // Reference: https://docs.nvidia.com/cuda/nvimagecodec/samples/metadata.html
-    // 
-    // Examples from official nvImageCodec metadata sample:
-    //   Label:     "Aperio Image Library v10.0.50\nlabel 415x422"
-    //   Macro:     "Aperio Image Library v10.0.50\nmacro 1280x421"
-    //   Thumbnail: "Aperio Image Library v10.0.50\n15374x17497 -> 674x768 - |..."
-    //   Level:     "Aperio Image Library v10.0.50\n16000x17597 [0,100 15374x17497] (256x256) J2K/YUV16..."
-    
-    if (!desc.empty())
-    {
-        // Convert to lowercase for case-insensitive matching
-        std::string desc_lower = desc;
-        std::transform(desc_lower.begin(), desc_lower.end(), desc_lower.begin(),
-                      [](unsigned char c){ return std::tolower(c); });
-        
-        // Check for explicit keywords
-        if (desc_lower.find("label ") != std::string::npos || 
-            desc_lower.find("\nlabel ") != std::string::npos)
-        {
-            return ImageType::LABEL;
-        }
-        
-        if (desc_lower.find("macro ") != std::string::npos || 
-            desc_lower.find("\nmacro ") != std::string::npos)
-        {
-            return ImageType::MACRO;
-        }
-        
-        // Aperio thumbnail has dimension transformation: "WxH -> WxH"
-        if (desc.find(" -> ") != std::string::npos && desc.find(" - ") != std::string::npos)
-        {
-            return ImageType::THUMBNAIL;
-        }
-    }
-    
-    // Fallback heuristics for formats without clear keywords
-    // Small images are likely associated images
-    if (ifd.width < 2000 && ifd.height < 2000)
-    {
-        // Convention: Second IFD (index 1) is often thumbnail
-        if (ifd_index == 1)
-        {
-            return ImageType::THUMBNAIL;
-        }
-        
-        // If description exists but no keywords matched, it's still likely associated
-        if (!desc.empty())
-        {
-            return ImageType::UNKNOWN;  // Has description but can't classify
-        }
-    }
-    
-    // IFD 0 is always main resolution level
-    if (ifd_index == 0)
-    {
-        return ImageType::RESOLUTION_LEVEL;
-    }
-    
-    // Large images are resolution levels
-    if (ifd.width >= 2000 || ifd.height >= 2000)
-    {
-        return ImageType::RESOLUTION_LEVEL;
-    }
-    
-    return ImageType::UNKNOWN;
 }
 
 std::string TiffFileParser::get_tiff_tag(uint32_t ifd_index, const std::string& tag_name) const
