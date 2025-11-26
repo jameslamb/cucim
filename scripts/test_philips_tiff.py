@@ -25,7 +25,7 @@ def setup_environment():
     config = {
         "plugin": {
             "names": [
-                "cucim.kit.cuslide2@26.02.00.so",  # Try cuslide2 first
+                "cucim.kit.cuslide2@25.12.00.so",  # Try cuslide2 first
             ]
         }
     }

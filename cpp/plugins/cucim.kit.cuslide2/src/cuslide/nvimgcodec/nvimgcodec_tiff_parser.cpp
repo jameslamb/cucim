@@ -139,23 +139,37 @@ NvImageCodecTiffParserManager::NvImageCodecTiffParserManager()
 
 NvImageCodecTiffParserManager::~NvImageCodecTiffParserManager()
 {
-    if (cpu_decoder_)
+    // Use try-catch to prevent segfaults during static destruction
+    // when nvTIFF or other libraries weren't loaded properly
+    try
     {
-        nvimgcodecDecoderDestroy(cpu_decoder_);
-        cpu_decoder_ = nullptr;
+        if (cpu_decoder_)
+        {
+            nvimgcodecDecoderDestroy(cpu_decoder_);
+            cpu_decoder_ = nullptr;
+        }
     }
+    catch (...) { cpu_decoder_ = nullptr; }
     
-    if (decoder_)
+    try
     {
-        nvimgcodecDecoderDestroy(decoder_);
-        decoder_ = nullptr;
+        if (decoder_)
+        {
+            nvimgcodecDecoderDestroy(decoder_);
+            decoder_ = nullptr;
+        }
     }
+    catch (...) { decoder_ = nullptr; }
     
-    if (instance_)
+    try
     {
-        nvimgcodecInstanceDestroy(instance_);
-        instance_ = nullptr;
+        if (instance_)
+        {
+            nvimgcodecInstanceDestroy(instance_);
+            instance_ = nullptr;
+        }
     }
+    catch (...) { instance_ = nullptr; }
 }
 
 // ============================================================================
@@ -606,9 +620,6 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
         
         #ifdef DEBUG
         // Map kind to human-readable name for debugging
-        // nvImageCodec 0.7.0 nvimgcodecMetadataKind_t enum values:
-        //   0 = UNKNOWN, 1 = TIFF_TAG, 2 = ICC_PROFILE, 3 = EXIF, 4 = GEO
-        //   5 = MED_APERIO, 6 = MED_PHILIPS, 7 = MED_VENTANA, 8 = MED_LEICA, 9 = MED_TRESTLE
         const char* kind_name = "UNKNOWN";
         switch (kind) {
             case NVIMGCODEC_METADATA_KIND_UNKNOWN: kind_name = "UNKNOWN"; break;
