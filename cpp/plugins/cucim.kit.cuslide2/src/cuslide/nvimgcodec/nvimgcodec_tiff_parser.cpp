@@ -606,14 +606,21 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
         
         #ifdef DEBUG
         // Map kind to human-readable name for debugging
+        // nvImageCodec 0.7.0 nvimgcodecMetadataKind_t enum values:
+        //   0 = UNKNOWN, 1 = TIFF_TAG, 2 = ICC_PROFILE, 3 = EXIF, 4 = GEO
+        //   5 = MED_APERIO, 6 = MED_PHILIPS, 7 = MED_VENTANA, 8 = MED_LEICA, 9 = MED_TRESTLE
         const char* kind_name = "UNKNOWN";
         switch (kind) {
-            case 0: kind_name = "TIFF_TAG"; break;
-            case 1: kind_name = "MED_APERIO"; break;
-            case 2: kind_name = "MED_PHILIPS"; break;
-            case 3: kind_name = "MED_LEICA"; break;
-            case 4: kind_name = "MED_VENTANA"; break;
-            case 5: kind_name = "MED_TRESTLE"; break;
+            case NVIMGCODEC_METADATA_KIND_UNKNOWN: kind_name = "UNKNOWN"; break;
+            case NVIMGCODEC_METADATA_KIND_TIFF_TAG: kind_name = "TIFF_TAG"; break;
+            case NVIMGCODEC_METADATA_KIND_ICC_PROFILE: kind_name = "ICC_PROFILE"; break;
+            case NVIMGCODEC_METADATA_KIND_EXIF: kind_name = "EXIF"; break;
+            case NVIMGCODEC_METADATA_KIND_GEO: kind_name = "GEO"; break;
+            case NVIMGCODEC_METADATA_KIND_MED_APERIO: kind_name = "MED_APERIO"; break;
+            case NVIMGCODEC_METADATA_KIND_MED_PHILIPS: kind_name = "MED_PHILIPS"; break;
+            case NVIMGCODEC_METADATA_KIND_MED_VENTANA: kind_name = "MED_VENTANA"; break;
+            case NVIMGCODEC_METADATA_KIND_MED_LEICA: kind_name = "MED_LEICA"; break;
+            case NVIMGCODEC_METADATA_KIND_MED_TRESTLE: kind_name = "MED_TRESTLE"; break;
         }
         fmt::print("    Metadata[{}]: kind={} ({}), format={}, size={}\n",
                   j, kind, kind_name, format, buffer_size);
@@ -628,9 +635,8 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
             ifd_info.metadata_blobs[kind] = std::move(blob);
             
             // Special handling: extract ImageDescription if it's a text format
-            // nvimgcodecMetadataFormat_t: RAW=0, XML=1, JSON=2, etc.
-            // For RAW format, treat as text if it looks like ASCII
-            if (kind == 1 && ifd_info.image_description.empty())  // MED_APERIO = 1
+            // nvImageCodec 0.7.0: Use proper enum values for medical formats
+            if (kind == NVIMGCODEC_METADATA_KIND_MED_APERIO && ifd_info.image_description.empty())
             {
                 // Aperio metadata is typically in RAW format as text
                 ifd_info.image_description.assign(buffer, buffer + buffer_size);
@@ -638,7 +644,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                 fmt::print("  ✅ Extracted Aperio ImageDescription ({} bytes)\n", buffer_size);
                 #endif
             }
-            else if (kind == 2 && ifd_info.image_description.empty())  // MED_PHILIPS = 2
+            else if (kind == NVIMGCODEC_METADATA_KIND_MED_PHILIPS && ifd_info.image_description.empty())
             {
                 // Philips metadata is typically XML
                 ifd_info.image_description.assign(buffer, buffer + buffer_size);
@@ -652,7 +658,7 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                 }
                 #endif
             }
-            else if (kind == 3 && ifd_info.image_description.empty())  // MED_LEICA = 3 (but might be misclassified Aperio!)
+            else if (kind == NVIMGCODEC_METADATA_KIND_MED_LEICA && ifd_info.image_description.empty())
             {
                 // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Aperio as Leica
                 // Check if this is actually Aperio by looking for "Aperio Image Library" text
@@ -669,15 +675,15 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                         #endif
                         ifd_info.image_description.assign(buffer, buffer + buffer_size);
                         
-                        // Also store it as kind=1 (Aperio) for proper detection
+                        // Also store as Aperio for proper detection
                         IfdInfo::MetadataBlob aperio_blob;
                         aperio_blob.format = format;
                         aperio_blob.data.assign(buffer, buffer + buffer_size);
-                        ifd_info.metadata_blobs[1] = std::move(aperio_blob);  // Store as MED_APERIO
+                        ifd_info.metadata_blobs[NVIMGCODEC_METADATA_KIND_MED_APERIO] = std::move(aperio_blob);
                     }
                 }
             }
-            else if (kind == 4 && ifd_info.image_description.empty())  // MED_VENTANA = 4 (but might be misclassified Philips!)
+            else if (kind == NVIMGCODEC_METADATA_KIND_MED_VENTANA && ifd_info.image_description.empty())
             {
                 // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Philips as Ventana
                 // Check if this is actually Philips XML by looking for DataObject/DPUfsImport
@@ -695,11 +701,11 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
                         #endif
                         ifd_info.image_description.assign(buffer, buffer + buffer_size);
                         
-                        // Also store it as kind=2 (Philips) for proper detection
+                        // Also store as Philips for proper detection
                         IfdInfo::MetadataBlob philips_blob;
                         philips_blob.format = format;
                         philips_blob.data.assign(buffer, buffer + buffer_size);
-                        ifd_info.metadata_blobs[2] = std::move(philips_blob);  // Store as MED_PHILIPS
+                        ifd_info.metadata_blobs[NVIMGCODEC_METADATA_KIND_MED_PHILIPS] = std::move(philips_blob);
                     }
                 }
             }
@@ -757,33 +763,227 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         return;
     }
     
-    // Map of TIFF tag IDs to names for common tags we want to extract
-    std::map<uint32_t, std::string> tiff_tag_names = {
-        {254, "SUBFILETYPE"},      // Image type classification
+    // ========================================================================
+    // nvImageCodec 0.7.0: Direct TIFF Tag Retrieval by ID
+    // ========================================================================
+    // Python API example:
+    //   tag_value = decoder.get_metadata(scs, id=tag_id).value
+    //
+    // C API equivalent:
+    //   1. Set metadata.kind = NVIMGCODEC_METADATA_KIND_TIFF_TAG
+    //   2. Set metadata.id = <tag_id> (e.g., 270 for ImageDescription)
+    //   3. Call nvimgcodecDecoderGetMetadata() to retrieve the specific tag
+    
+    // Map of TIFF tag IDs to names for tags we want to extract
+    std::vector<std::pair<uint16_t, std::string>> tiff_tags_to_query = {
+        {254, "SUBFILETYPE"},      // Image type classification (0=full, 1=reduced, etc.)
         {256, "IMAGEWIDTH"},
         {257, "IMAGELENGTH"},
         {258, "BITSPERSAMPLE"},
-        {259, "COMPRESSION"},      // ← Critical for codec detection!
+        {259, "COMPRESSION"},      // Critical for codec detection!
         {262, "PHOTOMETRIC"},
         {270, "IMAGEDESCRIPTION"}, // Vendor metadata
         {271, "MAKE"},             // Scanner manufacturer
         {272, "MODEL"},            // Scanner model
+        {277, "SAMPLESPERPIXEL"},
         {305, "SOFTWARE"},
         {306, "DATETIME"},
         {322, "TILEWIDTH"},
         {323, "TILELENGTH"},
+        {330, "SUBIFD"},           // SubIFD offsets (for OME-TIFF, etc.)
         {339, "SAMPLEFORMAT"},
         {347, "JPEGTABLES"}        // Shared JPEG tables
     };
     
-    // NOTE: nvImageCodec 0.6.0 Limitation
-    // ================================================================
-    // Individual TIFF tag access (kind=0, TIFF_TAG) is NOT available in 0.6.0
-    // Only vendor-specific metadata blobs are exposed (MED_APERIO, MED_PHILIPS, etc.)
-
+    #ifdef DEBUG
+    fmt::print("  📋 Extracting TIFF tags (nvImageCodec 0.7.0 - query by ID)...\n");
+    #endif // DEBUG
+    
     int extracted_count = 0;
     
-    // File extension heuristics for known WSI (Whole Slide Imaging) formats
+    // Query each tag individually by ID (following Python API pattern)
+    for (const auto& [tag_id, tag_name] : tiff_tags_to_query)
+    {
+        // Set up metadata request for specific tag
+        nvimgcodecMetadata_t metadata{};
+        metadata.struct_type = NVIMGCODEC_STRUCTURE_TYPE_METADATA;
+        metadata.struct_size = sizeof(nvimgcodecMetadata_t);
+        metadata.struct_next = nullptr;
+        metadata.kind = NVIMGCODEC_METADATA_KIND_TIFF_TAG;
+        metadata.id = tag_id;
+        metadata.buffer = nullptr;
+        metadata.buffer_size = 0;
+        
+        nvimgcodecMetadata_t* metadata_ptr = &metadata;
+        int metadata_count = 1;
+        
+        // First call: query buffer size
+        nvimgcodecStatus_t status = nvimgcodecDecoderGetMetadata(
+            manager.get_decoder(),
+            ifd_info.sub_code_stream,
+            &metadata_ptr,
+            &metadata_count
+        );
+        
+        if (status != NVIMGCODEC_STATUS_SUCCESS || metadata.buffer_size == 0)
+        {
+            // Tag not present in this IFD - this is normal, not all tags exist
+            continue;
+        }
+        
+        // Allocate buffer for tag value
+        std::vector<uint8_t> buffer(metadata.buffer_size);
+        metadata.buffer = buffer.data();
+        
+        // Second call: retrieve actual value
+        status = nvimgcodecDecoderGetMetadata(
+            manager.get_decoder(),
+            ifd_info.sub_code_stream,
+            &metadata_ptr,
+            &metadata_count
+        );
+        
+        if (status != NVIMGCODEC_STATUS_SUCCESS || metadata.buffer_size == 0)
+        {
+            continue;
+        }
+        
+        // Convert value based on type
+        std::string tag_value;
+        
+        switch (metadata.value_type)
+        {
+            case NVIMGCODEC_METADATA_VALUE_TYPE_ASCII:
+                // ASCII string
+                tag_value.assign(reinterpret_cast<const char*>(buffer.data()), metadata.buffer_size);
+                // Remove trailing null(s) if present
+                while (!tag_value.empty() && tag_value.back() == '\0')
+                    tag_value.pop_back();
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SHORT:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint16_t))
+                {
+                    uint16_t val = *reinterpret_cast<const uint16_t*>(buffer.data());
+                    tag_value = std::to_string(val);
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of shorts
+                    const uint16_t* vals = reinterpret_cast<const uint16_t*>(buffer.data());
+                    for (uint32_t i = 0; i < metadata.value_count && i < 10; i++)
+                    {
+                        if (i > 0) tag_value += ",";
+                        tag_value += std::to_string(vals[i]);
+                    }
+                    if (metadata.value_count > 10)
+                        tag_value += ",...";
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_LONG:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint32_t))
+                {
+                    uint32_t val = *reinterpret_cast<const uint32_t*>(buffer.data());
+                    tag_value = std::to_string(val);
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of longs (e.g., SUBIFD offsets)
+                    const uint32_t* vals = reinterpret_cast<const uint32_t*>(buffer.data());
+                    for (uint32_t i = 0; i < metadata.value_count && i < 10; i++)
+                    {
+                        if (i > 0) tag_value += ",";
+                        tag_value += std::to_string(vals[i]);
+                    }
+                    if (metadata.value_count > 10)
+                        tag_value += ",...";
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_BYTE:
+                if (metadata.value_count == 1)
+                {
+                    tag_value = std::to_string(static_cast<int>(buffer[0]));
+                }
+                else
+                {
+                    // Binary data - store as hex or size info
+                    tag_value = fmt::format("[{} bytes]", metadata.buffer_size);
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_LONG8:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint64_t))
+                {
+                    uint64_t val = *reinterpret_cast<const uint64_t*>(buffer.data());
+                    tag_value = std::to_string(val);
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_RATIONAL:
+                if (metadata.buffer_size >= 8)
+                {
+                    // Rational = two LONGs (numerator, denominator)
+                    uint32_t num = *reinterpret_cast<const uint32_t*>(buffer.data());
+                    uint32_t den = *reinterpret_cast<const uint32_t*>(buffer.data() + 4);
+                    if (den != 0)
+                        tag_value = fmt::format("{}/{}", num, den);
+                    else
+                        tag_value = std::to_string(num);
+                }
+                break;
+                
+            default:
+                // For unknown types, store size info
+                if (metadata.buffer_size <= 8 && metadata.value_count == 1)
+                {
+                    // Small value - try to interpret as number
+                    uint64_t val = 0;
+                    std::memcpy(&val, buffer.data(), std::min(metadata.buffer_size, sizeof(val)));
+                    tag_value = std::to_string(val);
+                }
+                else
+                {
+                    tag_value = fmt::format("[{} bytes, type={}]", metadata.buffer_size, 
+                                           static_cast<int>(metadata.value_type));
+                }
+                break;
+        }
+        
+        if (!tag_value.empty())
+        {
+            ifd_info.tiff_tags[tag_name] = tag_value;
+            extracted_count++;
+            
+            #ifdef DEBUG
+            fmt::print("    ✅ Tag {} ({}): {}\n", tag_id, tag_name, 
+                      tag_value.length() > 60 ? tag_value.substr(0, 60) + "..." : tag_value);
+            #endif // DEBUG
+        }
+    }
+    
+    if (extracted_count > 0)
+    {
+        #ifdef DEBUG
+        fmt::print("  ✅ Extracted {} TIFF tags using nvImageCodec 0.7.0 API\n", extracted_count);
+        #endif // DEBUG
+        
+        // Store ImageDescription if available from tags
+        auto desc_it = ifd_info.tiff_tags.find("IMAGEDESCRIPTION");
+        if (desc_it != ifd_info.tiff_tags.end() && ifd_info.image_description.empty())
+        {
+            ifd_info.image_description = desc_it->second;
+        }
+        
+        return;  // Success
+    }
+    
+    // Fallback: File extension heuristics for older nvImageCodec versions
+    #ifdef DEBUG
+    fmt::print("  ⚠️  Using file extension heuristics (no TIFF tags retrieved)\n");
+    #endif // DEBUG
+    
     std::string ext;
     size_t dot_pos = file_path_.rfind('.');
     if (dot_pos != std::string::npos)
@@ -799,33 +999,13 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         #ifdef DEBUG
         fmt::print("  ✅ Inferred JPEG compression (WSI format: {})\n", ext);
         #endif // DEBUG
-        extracted_count++;
     }
     
-    // Store ImageDescription if available
+    // Store ImageDescription if available from vendor metadata
     if (!ifd_info.image_description.empty())
     {
         ifd_info.tiff_tags["IMAGEDESCRIPTION"] = ifd_info.image_description;
     }
-    
-    // Summary
-    if (extracted_count > 0)
-    {
-        #ifdef DEBUG
-        fmt::print("  ✅ Compression detection successful (nvImageCodec 0.6.0 heuristics)\n");
-        #endif // DEBUG
-    }
-    else
-    {
-        #ifdef DEBUG
-        fmt::print("  ⚠️  Unable to determine compression type from file extension\n");
-        #endif // DEBUG
-        #ifdef DEBUG
-        fmt::print("      Upgrade to nvImageCodec 0.7.0 for direct TIFF tag access\n");
-        #endif // DEBUG
-    }
-    
-    (void)tiff_tag_names;  // Suppress unused variable warning
 }
 
 int TiffFileParser::get_subfile_type(uint32_t ifd_index) const
@@ -854,10 +1034,11 @@ std::vector<int> TiffFileParser::query_metadata_kinds(uint32_t ifd_index) const
         kinds.push_back(kind);
     }
     
-    // Also add TIFF_TAG kind (0) if any tags were extracted
+    // Also add TIFF_TAG kind if any tags were extracted
+    // nvImageCodec 0.7.0: TIFF_TAG = 1 (not 0!)
     if (!ifd_infos_[ifd_index].tiff_tags.empty())
     {
-        kinds.insert(kinds.begin(), 0);  // NVIMGCODEC_METADATA_KIND_TIFF_TAG = 0
+        kinds.insert(kinds.begin(), NVIMGCODEC_METADATA_KIND_TIFF_TAG);
     }
     
     return kinds;
@@ -869,21 +1050,22 @@ std::string TiffFileParser::get_detected_format() const
         return "Unknown";
     
     // Check first IFD for vendor-specific metadata
+    // nvImageCodec 0.7.0: Use proper enum values
     const auto& kinds = query_metadata_kinds(0);
     
     for (int kind : kinds)
     {
         switch (kind)
         {
-            case 1:  // NVIMGCODEC_METADATA_KIND_MED_APERIO
+            case NVIMGCODEC_METADATA_KIND_MED_APERIO:
                 return "Aperio SVS";
-            case 2:  // NVIMGCODEC_METADATA_KIND_MED_PHILIPS
+            case NVIMGCODEC_METADATA_KIND_MED_PHILIPS:
                 return "Philips TIFF";
-            case 3:  // NVIMGCODEC_METADATA_KIND_MED_LEICA (if available)
+            case NVIMGCODEC_METADATA_KIND_MED_LEICA:
                 return "Leica SCN";
-            case 4:  // NVIMGCODEC_METADATA_KIND_MED_VENTANA
+            case NVIMGCODEC_METADATA_KIND_MED_VENTANA:
                 return "Ventana";
-            case 5:  // NVIMGCODEC_METADATA_KIND_MED_TRESTLE
+            case NVIMGCODEC_METADATA_KIND_MED_TRESTLE:
                 return "Trestle";
             default:
                 break;
