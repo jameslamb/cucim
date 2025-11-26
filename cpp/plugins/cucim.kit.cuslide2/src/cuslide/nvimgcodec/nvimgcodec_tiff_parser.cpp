@@ -645,91 +645,12 @@ void TiffFileParser::extract_ifd_metadata(IfdInfo& ifd_info)
             blob.data.assign(buffer, buffer + buffer_size);
             ifd_info.metadata_blobs[kind] = std::move(blob);
             
-            // Special handling: extract ImageDescription if it's a text format
-            // nvImageCodec 0.7.0: Use proper enum values for medical formats
-            if (kind == NVIMGCODEC_METADATA_KIND_MED_APERIO && ifd_info.image_description.empty())
-            {
-                // Aperio metadata is typically in RAW format as text
-                ifd_info.image_description.assign(buffer, buffer + buffer_size);
-                #ifdef DEBUG
-                fmt::print("  ✅ Extracted Aperio ImageDescription ({} bytes)\n", buffer_size);
-                #endif
-            }
-            else if (kind == NVIMGCODEC_METADATA_KIND_MED_PHILIPS && ifd_info.image_description.empty())
-            {
-                // Philips metadata is typically XML
-                ifd_info.image_description.assign(buffer, buffer + buffer_size);
-                #ifdef DEBUG
-                fmt::print("  ✅ Extracted Philips ImageDescription XML ({} bytes)\n", buffer_size);
-                
-                // Show preview of XML
-                if (buffer_size > 0) {
-                    std::string preview(buffer, buffer + std::min(buffer_size, size_t(100)));
-                    fmt::print("     XML preview: {}...\n", preview);
-                }
-                #endif
-            }
-            else if (kind == NVIMGCODEC_METADATA_KIND_MED_LEICA && ifd_info.image_description.empty())
-            {
-                // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Aperio as Leica
-                // Check if this is actually Aperio by looking for "Aperio Image Library" text
-                if (buffer_size > 20)
-                {
-                    std::string content(buffer, buffer + std::min(buffer_size, size_t(200)));
-                    
-                    if (content.find("Aperio Image Library") != std::string::npos ||
-                        content.find("Aperio") == 0)  // Starts with "Aperio"
-                    {
-                        // This is actually Aperio misclassified as Leica!
-                        #ifdef DEBUG
-                        fmt::print("  ⚠️  nvImageCodec 0.6.0: Aperio misclassified as Leica (corrected)\n");
-                        #endif
-                        ifd_info.image_description.assign(buffer, buffer + buffer_size);
-                        
-                        // Also store as Aperio for proper detection
-                        IfdInfo::MetadataBlob aperio_blob;
-                        aperio_blob.format = format;
-                        aperio_blob.data.assign(buffer, buffer + buffer_size);
-                        ifd_info.metadata_blobs[NVIMGCODEC_METADATA_KIND_MED_APERIO] = std::move(aperio_blob);
-                    }
-                }
-            }
-            else if (kind == NVIMGCODEC_METADATA_KIND_MED_VENTANA && ifd_info.image_description.empty())
-            {
-                // WORKAROUND: nvImageCodec 0.6.0 sometimes misclassifies Philips as Ventana
-                // Check if this is actually Philips XML by looking for DataObject/DPUfsImport
-                if (buffer_size > 100)
-                {
-                    std::string content(buffer, buffer + std::min(buffer_size, size_t(500)));
-                    
-                    if (content.find("<?xml") != std::string::npos && 
-                        content.find("DataObject") != std::string::npos &&
-                        content.find("DPUfsImport") != std::string::npos)
-                    {
-                        // This is actually Philips XML misclassified as Ventana!
-                        #ifdef DEBUG
-                        fmt::print("  ⚠️  nvImageCodec 0.6.0: Philips misclassified as Ventana (corrected)\n");
-                        #endif
-                        ifd_info.image_description.assign(buffer, buffer + buffer_size);
-                        
-                        // Also store as Philips for proper detection
-                        IfdInfo::MetadataBlob philips_blob;
-                        philips_blob.format = format;
-                        philips_blob.data.assign(buffer, buffer + buffer_size);
-                        ifd_info.metadata_blobs[NVIMGCODEC_METADATA_KIND_MED_PHILIPS] = std::move(philips_blob);
-                    }
-                }
-            }
+            // Note: ImageDescription is now extracted directly via TIFF tag 270
+            // in extract_tiff_tags() using nvImageCodec 0.7.0's direct tag query API.
+            // The vendor metadata blobs (MED_APERIO, MED_PHILIPS, etc.) are stored
+            // above for format detection and vendor-specific parsing.
         }
     }
-    
-    // WORKAROUND for nvImageCodec 0.6.0: Philips TIFF metadata limitation
-    // ========================================================================
-    // nvImageCodec 0.6.0 does NOT expose:
-    // 1. Individual TIFF tags (SOFTWARE, ImageDescription, etc.)
-    // 2. Philips format detection for some files
-    //
-   
 }
 
 const IfdInfo& TiffFileParser::get_ifd(uint32_t index) const
