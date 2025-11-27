@@ -74,6 +74,28 @@ static std::string tiff_tag_value_to_string(const TiffTagValue& value)
             if (v.size() > 10) result += ",...";
             return result;
         }
+        else if constexpr (std::is_same_v<T, std::vector<float>>)
+        {
+            std::string result;
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            {
+                if (i > 0) result += ",";
+                result += std::to_string(v[i]);
+            }
+            if (v.size() > 10) result += ",...";
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<double>>)
+        {
+            std::string result;
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            {
+                if (i > 0) result += ",";
+                result += std::to_string(v[i]);
+            }
+            if (v.size() > 10) result += ",...";
+            return result;
+        }
         else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>)
         {
             return fmt::format("{}", v);
@@ -1009,45 +1031,13 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_FLOAT:
-                if (extract_single_value<float>(buffer, metadata.value_count, tag_value))
-                {
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of floats - store as string representation
-                    const float* vals = reinterpret_cast<const float*>(buffer.data());
-                    std::string result;
-                    for (uint32_t i = 0; i < metadata.value_count && i < 10; ++i)
-                    {
-                        if (i > 0) result += ",";
-                        result += std::to_string(vals[i]);
-                    }
-                    if (metadata.value_count > 10) result += ",...";
-                    tag_value = std::move(result);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<float>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<float>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_DOUBLE:
-                if (extract_single_value<double>(buffer, metadata.value_count, tag_value))
-                {
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of doubles - store as string representation
-                    const double* vals = reinterpret_cast<const double*>(buffer.data());
-                    std::string result;
-                    for (uint32_t i = 0; i < metadata.value_count && i < 10; ++i)
-                    {
-                        if (i > 0) result += ",";
-                        result += std::to_string(vals[i]);
-                    }
-                    if (metadata.value_count > 10) result += ",...";
-                    tag_value = std::move(result);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<double>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<double>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_RATIONAL:
@@ -1172,6 +1162,10 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                     return fmt::format("[{} uint32 values]", v.size());
                 else if constexpr (std::is_same_v<T, std::vector<uint64_t>>)
                     return fmt::format("[{} uint64 values]", v.size());
+                else if constexpr (std::is_same_v<T, std::vector<float>>)
+                    return fmt::format("[{} float values]", v.size());
+                else if constexpr (std::is_same_v<T, std::vector<double>>)
+                    return fmt::format("[{} double values]", v.size());
                 else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>)
                     return fmt::format("{}", v);
                 else

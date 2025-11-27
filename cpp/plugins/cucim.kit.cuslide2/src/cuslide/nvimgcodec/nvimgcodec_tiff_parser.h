@@ -56,7 +56,9 @@ using TiffTagValue = std::variant<
     std::vector<uint8_t>,
     std::vector<uint16_t>,
     std::vector<uint32_t>,
-    std::vector<uint64_t>
+    std::vector<uint64_t>,
+    std::vector<float>,   // Arrays of FLOAT values
+    std::vector<double>   // Arrays of DOUBLE values
 >;
 
 /**
@@ -399,7 +401,9 @@ using TiffTagValue = std::variant<
     std::vector<uint8_t>,
     std::vector<uint16_t>,
     std::vector<uint32_t>,
-    std::vector<uint64_t>
+    std::vector<uint64_t>,
+    std::vector<float>,   // Arrays of FLOAT values
+    std::vector<double>   // Arrays of DOUBLE values
 >;
 
 struct IfdInfo {
