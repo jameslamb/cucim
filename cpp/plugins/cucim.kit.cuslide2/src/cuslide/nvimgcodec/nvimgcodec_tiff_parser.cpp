@@ -1033,10 +1033,11 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 }
                 else if (metadata.value_count > 1)
                 {
-                    // Array of 64-bit values
+                    // Array of 64-bit values - validate count against buffer size
                     const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
-                    std::vector<uint64_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
+                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
+                                           metadata.buffer_size / sizeof(uint64_t));
+                    tag_value = std::vector<uint64_t>(vals, vals + count);
                     value_stored = true;
                 }
                 break;
@@ -1051,10 +1052,11 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 }
                 else if (metadata.value_count > 1)
                 {
-                    // Array of signed 64-bit values - store as vector<uint64_t>
+                    // Array of signed 64-bit values - validate count against buffer size
                     const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
-                    std::vector<uint64_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
+                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
+                                           metadata.buffer_size / sizeof(uint64_t));
+                    tag_value = std::vector<uint64_t>(vals, vals + count);
                     value_stored = true;
                 }
                 break;
