@@ -1056,10 +1056,8 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 {
                     // Array of Rationals - store as comma-separated string
                     size_t rational_size = 8;  // 2 × uint32_t
-                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
-                                           metadata.buffer_size / rational_size);
                     std::string result;
-                    for (size_t i = 0; i < count; ++i)
+                    for (size_t i = 0; i < metadata.value_count; ++i)
                     {
                         const uint8_t* ptr = buffer.data() + i * rational_size;
                         uint32_t num = *reinterpret_cast<const uint32_t*>(ptr);
@@ -1091,10 +1089,8 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 {
                     // Array of Signed Rationals - store as comma-separated string
                     size_t rational_size = 8;  // 2 × int32_t
-                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
-                                           metadata.buffer_size / rational_size);
                     std::string result;
-                    for (size_t i = 0; i < count; ++i)
+                    for (size_t i = 0; i < metadata.value_count; ++i)
                     {
                         const uint8_t* ptr = buffer.data() + i * rational_size;
                         int32_t num = *reinterpret_cast<const int32_t*>(ptr);
