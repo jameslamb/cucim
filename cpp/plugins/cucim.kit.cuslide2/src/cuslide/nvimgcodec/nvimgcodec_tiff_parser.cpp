@@ -29,7 +29,11 @@ static std::string tiff_tag_value_to_string(const TiffTagValue& value)
 {
     return std::visit([](const auto& v) -> std::string {
         using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, std::string>)
+        if constexpr (std::is_same_v<T, std::monostate>)
+        {
+            return "";  // Empty/unset
+        }
+        else if constexpr (std::is_same_v<T, std::string>)
         {
             return v;
         }
@@ -86,7 +90,9 @@ static uint16_t tiff_tag_value_to_uint16(const TiffTagValue& value)
 {
     return std::visit([](const auto& v) -> uint16_t {
         using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, uint16_t>)
+        if constexpr (std::is_same_v<T, std::monostate>)
+            return 0;  // Empty/unset
+        else if constexpr (std::is_same_v<T, uint16_t>)
             return v;
         else if constexpr (std::is_same_v<T, uint8_t>)
             return static_cast<uint16_t>(v);
@@ -1154,7 +1160,9 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
             // Format value for debug output
             std::string debug_str = std::visit([](const auto& v) -> std::string {
                 using T = std::decay_t<decltype(v)>;
-                if constexpr (std::is_same_v<T, std::string>)
+                if constexpr (std::is_same_v<T, std::monostate>)
+                    return "<unset>";
+                else if constexpr (std::is_same_v<T, std::string>)
                     return v.length() > 60 ? v.substr(0, 60) + "..." : v;
                 else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
                     return fmt::format("[{} bytes]", v.size());

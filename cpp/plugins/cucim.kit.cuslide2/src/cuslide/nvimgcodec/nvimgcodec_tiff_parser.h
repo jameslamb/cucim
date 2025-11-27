@@ -13,6 +13,8 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <unordered_map>
+#include <variant>
 #include <mutex>
 #include <stdexcept>
 #include <cucim/io/device.h>
@@ -21,6 +23,41 @@ namespace cuslide2::nvimgcodec
 {
 
 #ifdef CUCIM_HAS_NVIMGCODEC
+
+/**
+ * @brief Variant type for storing typed TIFF tag values
+ *
+ * Supports all TIFF tag value types as defined in nvimgcodecMetadataValueType_t:
+ * - std::monostate: Empty/unset state (tag not found or not extracted)
+ * - std::string: ASCII strings (ImageDescription, Software, DateTime, etc.)
+ * - int8_t, uint8_t: SBYTE/BYTE values
+ * - int16_t, uint16_t: SSHORT/SHORT values (Compression, Photometric, etc.)
+ * - int32_t, uint32_t: SLONG/LONG values (ImageWidth, ImageLength, SubfileType, etc.)
+ * - int64_t, uint64_t: SLONG8/LONG8/IFD8 values (BigTIFF support)
+ * - float, double: FLOAT/DOUBLE values
+ * - std::vector<uint8_t>: Binary data (JPEGTables, UNDEFINED type, etc.)
+ * - std::vector<uint16_t>: Arrays of SHORT values (BitsPerSample, etc.)
+ * - std::vector<uint32_t>: Arrays of LONG values (SubIFD offsets, etc.)
+ * - std::vector<uint64_t>: Arrays of LONG8 values (BigTIFF offsets, etc.)
+ */
+using TiffTagValue = std::variant<
+    std::monostate,  // Empty/unset state
+    std::string,
+    int8_t,
+    uint8_t,
+    int16_t,
+    uint16_t,
+    int32_t,
+    uint32_t,
+    int64_t,
+    uint64_t,
+    float,
+    double,
+    std::vector<uint8_t>,
+    std::vector<uint16_t>,
+    std::vector<uint32_t>,
+    std::vector<uint64_t>
+>;
 
 /**
  * @brief Image type classification for TIFF IFDs
@@ -56,9 +93,9 @@ struct IfdInfo
     };
     std::map<int, MetadataBlob> metadata_blobs;
 
-    // nvImageCodec 0.7.0: Individual TIFF tag storage
-    // tag_name -> tag_value (e.g., "SUBFILETYPE" -> "0")
-    std::map<std::string, std::string> tiff_tags;
+    // nvImageCodec 0.7.0: Individual TIFF tag storage with typed values
+    // tag_name -> TiffTagValue (variant with typed storage)
+    std::unordered_map<std::string, TiffTagValue> tiff_tags;
 
     IfdInfo() : index(0), width(0), height(0), num_channels(0),
                 bits_per_sample(0), sub_code_stream(nullptr) {}
@@ -344,19 +381,33 @@ private:
 #else // !CUCIM_HAS_NVIMGCODEC
 
 // Stub implementations when nvImageCodec is not available
-enum class ImageType {
-    RESOLUTION_LEVEL,
-    THUMBNAIL,
-    LABEL,
-    MACRO,
-    UNKNOWN
-};
+
+// Stub TiffTagValue for API compatibility
+using TiffTagValue = std::variant<
+    std::monostate,  // Empty/unset state
+    std::string,
+    int8_t,
+    uint8_t,
+    int16_t,
+    uint16_t,
+    int32_t,
+    uint32_t,
+    int64_t,
+    uint64_t,
+    float,
+    double,
+    std::vector<uint8_t>,
+    std::vector<uint16_t>,
+    std::vector<uint32_t>,
+    std::vector<uint64_t>
+>;
 
 struct IfdInfo {
     struct MetadataBlob {
         int format;
         std::vector<uint8_t> data;
     };
+    std::unordered_map<std::string, TiffTagValue> tiff_tags;
 };
 
 class TiffFileParser
