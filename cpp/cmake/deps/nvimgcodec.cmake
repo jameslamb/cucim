@@ -8,7 +8,7 @@
 if (NOT TARGET deps::nvimgcodec)
     # Option to automatically install nvImageCodec via conda
     option(AUTO_INSTALL_NVIMGCODEC "Automatically install nvImageCodec via conda" ON)
-    set(NVIMGCODEC_VERSION "0.6.0" CACHE STRING "nvImageCodec version to install")
+    set(NVIMGCODEC_VERSION "0.7.0" CACHE STRING "nvImageCodec version to install")
 
     # Automatic installation logic
     if(AUTO_INSTALL_NVIMGCODEC)
