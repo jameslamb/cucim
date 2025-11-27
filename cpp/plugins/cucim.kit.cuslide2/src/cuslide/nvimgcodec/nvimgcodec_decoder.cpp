@@ -5,7 +5,6 @@
 
 #include "nvimgcodec_decoder.h"
 #include "nvimgcodec_tiff_parser.h"
-#include "nvimgcodec_manager.h"
 
 #ifdef CUCIM_HAS_NVIMGCODEC
 #include <nvimgcodec.h>
@@ -16,7 +15,6 @@
 #include <cstring>
 #include <string>
 #include <stdexcept>
-#include <vector>
 #include <unistd.h>
 #include <mutex>
 #include <fmt/format.h>
@@ -34,15 +32,21 @@ namespace cuslide2::nvimgcodec
 // RAII Helpers for nvImageCodec Resources
 // ============================================================================
 
-// RAII wrapper for nvimgcodecCodeStream_t
-struct CodeStreamDeleter
+// NOTE: Sub-code streams obtained via nvimgcodecCodeStreamGetSubCodeStream() are VIEWS
+// into the parent stream and share internal data. They should NOT be explicitly destroyed.
+// The parent stream destruction handles cleanup of all sub-streams.
+// Using nvimgcodecCodeStreamDestroy() on sub-streams causes "free(): invalid pointer".
+//
+// We use a no-op deleter for sub-streams to allow RAII-style scoping without destruction.
+struct SubCodeStreamNoOpDeleter
 {
-    void operator()(nvimgcodecCodeStream_t stream) const
+    void operator()(nvimgcodecCodeStream_t) const
     {
-        if (stream) nvimgcodecCodeStreamDestroy(stream);
+        // NO-OP: Sub-streams are views and should not be destroyed
+        // The parent code stream will clean them up
     }
 };
-using UniqueCodeStream = std::unique_ptr<std::remove_pointer_t<nvimgcodecCodeStream_t>, CodeStreamDeleter>;
+using SubCodeStreamView = std::unique_ptr<std::remove_pointer_t<nvimgcodecCodeStream_t>, SubCodeStreamNoOpDeleter>;
 
 // RAII wrapper for nvimgcodecImage_t
 struct ImageDeleter
@@ -181,6 +185,18 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         std::string device_str = std::string(out_device);
         bool target_is_cpu = (device_str.find("cpu") != std::string::npos);
         
+        // Check if ROI is out of bounds (extends beyond image boundaries)
+        // CPU decoder doesn't support out-of-bounds ROI decoding, must use hybrid decoder
+        bool roi_out_of_bounds = (x + width > ifd_info.width) || (y + height > ifd_info.height);
+        if (target_is_cpu && roi_out_of_bounds)
+        {
+            target_is_cpu = false;  // Force hybrid decoder for out-of-bounds ROI
+            #ifdef DEBUG
+            fmt::print("  ⚠️  ROI out of bounds (region ends at [{},{}] but image is {}x{}), using hybrid decoder\n",
+                      x + width, y + height, ifd_info.width, ifd_info.height);
+            #endif
+        }
+        
         nvimgcodecDecoder_t decoder;
         if (target_is_cpu && manager.has_cpu_decoder())
         {
@@ -231,7 +247,8 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             #endif
             return false;
         }
-        UniqueCodeStream roi_stream(roi_stream_raw);
+        // Use no-op deleter: ROI sub-streams are views that shouldn't be destroyed
+        SubCodeStreamView roi_stream(roi_stream_raw);
         
         // Step 2: Determine buffer kind based on target device and decoder
         int device_count = 0;
@@ -391,7 +408,7 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         fmt::print("✅ nvImageCodec ROI decode successful: {}x{} at ({}, {})\n", 
                   width, height, x, y);
         #endif
-        return true;  // roi_stream, image, decode_future cleaned up by RAII
+        return true;  // image, decode_future cleaned up by RAII; roi_stream is a view (no cleanup needed)
     }
     catch (const std::exception& e)
     {
