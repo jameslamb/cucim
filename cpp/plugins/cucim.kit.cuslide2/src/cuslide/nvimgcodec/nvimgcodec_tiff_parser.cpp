@@ -1108,9 +1108,9 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_RATIONAL:
-                if (metadata.buffer_size >= 8)
+                if (metadata.value_count == 1 && metadata.buffer_size >= 8)
                 {
-                    // Rational = two LONGs (numerator, denominator) - store as string
+                    // Single Rational = two LONGs (numerator, denominator) - store as string
                     uint32_t num = *reinterpret_cast<const uint32_t*>(buffer.data());
                     uint32_t den = *reinterpret_cast<const uint32_t*>(buffer.data() + 4);
                     if (den != 0)
@@ -1119,18 +1119,60 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                         tag_value = std::to_string(num);
                     value_stored = true;
                 }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of Rationals - store as comma-separated string
+                    size_t rational_size = 8;  // 2 × uint32_t
+                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
+                                           metadata.buffer_size / rational_size);
+                    std::string result;
+                    for (size_t i = 0; i < count; ++i)
+                    {
+                        const uint8_t* ptr = buffer.data() + i * rational_size;
+                        uint32_t num = *reinterpret_cast<const uint32_t*>(ptr);
+                        uint32_t den = *reinterpret_cast<const uint32_t*>(ptr + 4);
+                        if (i > 0) result += ", ";
+                        if (den != 0)
+                            result += fmt::format("{}/{}", num, den);
+                        else
+                            result += std::to_string(num);
+                    }
+                    tag_value = std::move(result);
+                    value_stored = true;
+                }
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SRATIONAL:
-                if (metadata.buffer_size >= 8)
+                if (metadata.value_count == 1 && metadata.buffer_size >= 8)
                 {
-                    // Signed Rational = two SLONGs (numerator, denominator) - store as string
+                    // Single Signed Rational = two SLONGs (numerator, denominator) - store as string
                     int32_t num = *reinterpret_cast<const int32_t*>(buffer.data());
                     int32_t den = *reinterpret_cast<const int32_t*>(buffer.data() + 4);
                     if (den != 0)
                         tag_value = fmt::format("{}/{}", num, den);
                     else
                         tag_value = std::to_string(num);
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of Signed Rationals - store as comma-separated string
+                    size_t rational_size = 8;  // 2 × int32_t
+                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
+                                           metadata.buffer_size / rational_size);
+                    std::string result;
+                    for (size_t i = 0; i < count; ++i)
+                    {
+                        const uint8_t* ptr = buffer.data() + i * rational_size;
+                        int32_t num = *reinterpret_cast<const int32_t*>(ptr);
+                        int32_t den = *reinterpret_cast<const int32_t*>(ptr + 4);
+                        if (i > 0) result += ", ";
+                        if (den != 0)
+                            result += fmt::format("{}/{}", num, den);
+                        else
+                            result += std::to_string(num);
+                    }
+                    tag_value = std::move(result);
                     value_stored = true;
                 }
                 break;
