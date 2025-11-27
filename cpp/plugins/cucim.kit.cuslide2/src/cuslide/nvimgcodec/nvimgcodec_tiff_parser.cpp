@@ -4,7 +4,6 @@
  */
 
 #include "nvimgcodec_tiff_parser.h"
-#include "nvimgcodec_manager.h"
 
 #include <algorithm>  // for std::transform
 #include <cstring>    // for strlen
@@ -24,6 +23,98 @@ namespace cuslide2::nvimgcodec
 {
 
 #ifdef CUCIM_HAS_NVIMGCODEC
+
+// Helper function to convert TiffTagValue variant to string representation
+static std::string tiff_tag_value_to_string(const TiffTagValue& value)
+{
+    return std::visit([](const auto& v) -> std::string {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, std::string>)
+        {
+            return v;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+        {
+            return fmt::format("[{} bytes]", v.size());
+        }
+        else if constexpr (std::is_same_v<T, std::vector<uint16_t>>)
+        {
+            std::string result;
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            {
+                if (i > 0) result += ",";
+                result += std::to_string(v[i]);
+            }
+            if (v.size() > 10) result += ",...";
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<uint32_t>>)
+        {
+            std::string result;
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            {
+                if (i > 0) result += ",";
+                result += std::to_string(v[i]);
+            }
+            if (v.size() > 10) result += ",...";
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, std::vector<uint64_t>>)
+        {
+            std::string result;
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            {
+                if (i > 0) result += ",";
+                result += std::to_string(v[i]);
+            }
+            if (v.size() > 10) result += ",...";
+            return result;
+        }
+        else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>)
+        {
+            return fmt::format("{}", v);
+        }
+        else
+        {
+            return std::to_string(v);
+        }
+    }, value);
+}
+
+// Helper to get uint16_t value from TiffTagValue (returns 0 if not convertible)
+static uint16_t tiff_tag_value_to_uint16(const TiffTagValue& value)
+{
+    return std::visit([](const auto& v) -> uint16_t {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, uint16_t>)
+            return v;
+        else if constexpr (std::is_same_v<T, uint8_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, int8_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, int16_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, int32_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, uint32_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, int64_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, uint64_t>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, float>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, double>)
+            return static_cast<uint16_t>(v);
+        else if constexpr (std::is_same_v<T, std::string>)
+        {
+            try { return static_cast<uint16_t>(std::stoi(v)); }
+            catch (...) { return 0; }
+        }
+        else
+            return 0;
+    }, value);
+}
 
 // ============================================================================
 // NvImageCodecTiffParserManager Implementation
@@ -217,12 +308,9 @@ TiffFileParser::TiffFileParser(const std::string& file_path)
     }
     catch (const std::exception& e)
     {
-        // Cleanup on error
-        if (main_code_stream_)
-        {
-            nvimgcodecCodeStreamDestroy(main_code_stream_);
-            main_code_stream_ = nullptr;
-        }
+        // Don't explicitly destroy main_code_stream_ here - let instance cleanup handle it
+        // (See destructor comment for explanation of static destruction order issues)
+        main_code_stream_ = nullptr;
         
         throw;  // Re-throw
     }
@@ -230,22 +318,30 @@ TiffFileParser::TiffFileParser(const std::string& file_path)
 
 TiffFileParser::~TiffFileParser()
 {
-    // Destroy sub-code streams first
+    // NOTE: We intentionally do NOT destroy main_code_stream_ or sub_code_streams here.
+    //
+    // Reason: Static destruction order is undefined at program exit. The singleton
+    // (NvImageCodecTiffParserManager) that owns the nvimgcodec instance might be
+    // destroyed BEFORE this TiffFileParser. If we try to call nvimgcodecCodeStreamDestroy()
+    // on a code stream whose parent instance is already destroyed, we get
+    // "free(): invalid pointer".
+    //
+    // Solution: Let nvimgcodec handle cleanup. When nvimgcodecInstanceDestroy() is called
+    // (in the singleton destructor), it cleans up ALL resources associated with that
+    // instance, including all code streams. This is safe because:
+    // 1. If TiffFileParser is destroyed first → instance cleanup later handles it
+    // 2. If singleton is destroyed first → instance cleanup already handled it
+    //
+    // The only "leak" scenario is if we create many TiffFileParsers during a long-running
+    // session without closing them - but that's a usage issue, not a safety issue.
+    // In practice, CuImage/TIFF objects manage TiffFileParser lifetime properly.
+    
+    // Clear pointers (don't destroy - instance cleanup handles it)
     for (auto& ifd_info : ifd_infos_)
     {
-        if (ifd_info.sub_code_stream)
-        {
-            nvimgcodecCodeStreamDestroy(ifd_info.sub_code_stream);
-            ifd_info.sub_code_stream = nullptr;
-        }
+        ifd_info.sub_code_stream = nullptr;
     }
-    
-    // Then destroy main code stream
-    if (main_code_stream_)
-    {
-        nvimgcodecCodeStreamDestroy(main_code_stream_);
-        main_code_stream_ = nullptr;
-    }
+    main_code_stream_ = nullptr;
     
     ifd_infos_.clear();
 }
@@ -328,12 +424,9 @@ void TiffFileParser::parse_tiff_structure()
             #ifdef DEBUG
             fmt::print("   This IFD will be SKIPPED and cannot be decoded.\n");
             #endif // DEBUG
-            // Clean up the sub_code_stream before continuing
-            if (ifd_info.sub_code_stream)
-            {
-                nvimgcodecCodeStreamDestroy(ifd_info.sub_code_stream);
-                ifd_info.sub_code_stream = nullptr;
-            }
+            // NOTE: Do NOT destroy sub_code_stream here - it's a view into main_code_stream
+            // Main stream destruction will handle cleanup. Just mark as invalid.
+            ifd_info.sub_code_stream = nullptr;
             continue;
         }
         
@@ -379,14 +472,14 @@ void TiffFileParser::parse_tiff_structure()
             // Try to infer compression from TIFF metadata first
             bool compression_inferred = false;
             
-            // Check if we have TIFF Compression tag (stored as string key "COMPRESSION")
+            // Check if we have TIFF Compression tag (stored as typed value)
             auto compression_it = ifd_info.tiff_tags.find("COMPRESSION");
             if (compression_it != ifd_info.tiff_tags.end())
             {
                 try
                 {
-                    // Parse compression value from string
-                    uint16_t compression_value = static_cast<uint16_t>(std::stoi(compression_it->second));
+                    // Get compression value from typed variant
+                    uint16_t compression_value = tiff_tag_value_to_uint16(compression_it->second);
                     
                     switch (compression_value)
                     {
@@ -670,7 +763,7 @@ std::string TiffFileParser::get_tiff_tag(uint32_t ifd_index, const std::string& 
     
     auto it = ifd_infos_[ifd_index].tiff_tags.find(tag_name);
     if (it != ifd_infos_[ifd_index].tiff_tags.end())
-        return it->second;
+        return tiff_tag_value_to_string(it->second);
     
     return "";
 }
@@ -757,7 +850,17 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
             &metadata_count
         );
         
-        if (status != NVIMGCODEC_STATUS_SUCCESS || metadata.buffer_size == 0)
+        if (status != NVIMGCODEC_STATUS_SUCCESS)
+        {
+            // API error - log warning for unexpected failures
+            // Note: Some status codes may indicate "tag not found" which is normal
+            #ifdef DEBUG
+            fmt::print("  ⚠️  TIFF tag {} query failed (status: {})\n", tag_id, static_cast<int>(status));
+            #endif
+            continue;
+        }
+        
+        if (metadata.buffer_size == 0)
         {
             // Tag not present in this IFD - this is normal, not all tags exist
             continue;
@@ -775,41 +878,57 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
             &metadata_count
         );
         
-        if (status != NVIMGCODEC_STATUS_SUCCESS || metadata.buffer_size == 0)
+        if (status != NVIMGCODEC_STATUS_SUCCESS)
         {
+            // Unexpected: first call succeeded but second failed
+            #ifdef DEBUG
+            fmt::print("  ⚠️  TIFF tag {} retrieval failed (status: {})\n", tag_id, static_cast<int>(status));
+            #endif
             continue;
         }
         
-        // Convert value based on type
-        std::string tag_value;
+        if (metadata.buffer_size == 0)
+        {
+            // Unexpected: buffer was allocated but size is now 0
+            continue;
+        }
+        
+        // Convert value based on type and store as typed variant
+        TiffTagValue tag_value;
+        bool value_stored = false;
         
         switch (metadata.value_type)
         {
             case NVIMGCODEC_METADATA_VALUE_TYPE_ASCII:
+            {
                 // ASCII string
-                tag_value.assign(reinterpret_cast<const char*>(buffer.data()), metadata.buffer_size);
+                std::string str_val;
+                str_val.assign(reinterpret_cast<const char*>(buffer.data()), metadata.buffer_size);
                 // Remove trailing null(s) if present
-                while (!tag_value.empty() && tag_value.back() == '\0')
-                    tag_value.pop_back();
+                while (!str_val.empty() && str_val.back() == '\0')
+                    str_val.pop_back();
+                if (!str_val.empty())
+                {
+                    tag_value = std::move(str_val);
+                    value_stored = true;
+                }
                 break;
+            }
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SHORT:
                 if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint16_t))
                 {
                     uint16_t val = *reinterpret_cast<const uint16_t*>(buffer.data());
-                    tag_value = std::to_string(val);
+                    tag_value = val;
+                    value_stored = true;
                 }
                 else if (metadata.value_count > 1)
                 {
-                    // Array of shorts
+                    // Array of shorts - store as vector
                     const uint16_t* vals = reinterpret_cast<const uint16_t*>(buffer.data());
-                    for (uint32_t i = 0; i < metadata.value_count && i < 10; i++)
-                    {
-                        if (i > 0) tag_value += ",";
-                        tag_value += std::to_string(vals[i]);
-                    }
-                    if (metadata.value_count > 10)
-                        tag_value += ",...";
+                    std::vector<uint16_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
                 }
                 break;
                 
@@ -817,80 +936,250 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint32_t))
                 {
                     uint32_t val = *reinterpret_cast<const uint32_t*>(buffer.data());
-                    tag_value = std::to_string(val);
+                    tag_value = val;
+                    value_stored = true;
                 }
                 else if (metadata.value_count > 1)
                 {
-                    // Array of longs (e.g., SUBIFD offsets)
+                    // Array of longs - store as vector
                     const uint32_t* vals = reinterpret_cast<const uint32_t*>(buffer.data());
-                    for (uint32_t i = 0; i < metadata.value_count && i < 10; i++)
-                    {
-                        if (i > 0) tag_value += ",";
-                        tag_value += std::to_string(vals[i]);
-                    }
-                    if (metadata.value_count > 10)
-                        tag_value += ",...";
+                    std::vector<uint32_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
                 }
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_BYTE:
                 if (metadata.value_count == 1)
                 {
-                    tag_value = std::to_string(static_cast<int>(buffer[0]));
+                    tag_value = buffer[0];
+                    value_stored = true;
                 }
                 else
                 {
-                    // Binary data - store as hex or size info
-                    tag_value = fmt::format("[{} bytes]", metadata.buffer_size);
+                    // Binary data - store as vector<uint8_t>
+                    std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + metadata.buffer_size);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SBYTE:
+                if (metadata.value_count == 1)
+                {
+                    tag_value = static_cast<int8_t>(buffer[0]);
+                    value_stored = true;
+                }
+                else
+                {
+                    // Signed byte array - store as vector<uint8_t> (reinterpret as needed)
+                    std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + metadata.buffer_size);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_UNDEFINED:
+                // UNDEFINED type - binary data, store as vector<uint8_t>
+                {
+                    std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + metadata.buffer_size);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SSHORT:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int16_t))
+                {
+                    int16_t val = *reinterpret_cast<const int16_t*>(buffer.data());
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of signed shorts - store as vector<uint16_t> (reinterpret as needed)
+                    const uint16_t* vals = reinterpret_cast<const uint16_t*>(buffer.data());
+                    std::vector<uint16_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SLONG:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int32_t))
+                {
+                    int32_t val = *reinterpret_cast<const int32_t*>(buffer.data());
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of signed longs - store as vector<uint32_t> (reinterpret as needed)
+                    const uint32_t* vals = reinterpret_cast<const uint32_t*>(buffer.data());
+                    std::vector<uint32_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
                 }
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_LONG8:
+            case NVIMGCODEC_METADATA_VALUE_TYPE_IFD8:
+                // 64-bit unsigned integer (BigTIFF)
                 if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint64_t))
                 {
                     uint64_t val = *reinterpret_cast<const uint64_t*>(buffer.data());
-                    tag_value = std::to_string(val);
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of 64-bit values
+                    const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
+                    std::vector<uint64_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SLONG8:
+                // 64-bit signed integer (BigTIFF)
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int64_t))
+                {
+                    int64_t val = *reinterpret_cast<const int64_t*>(buffer.data());
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of signed 64-bit values - store as vector<uint64_t>
+                    const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
+                    std::vector<uint64_t> vec(vals, vals + metadata.value_count);
+                    tag_value = std::move(vec);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_FLOAT:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(float))
+                {
+                    float val = *reinterpret_cast<const float*>(buffer.data());
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of floats - store as string representation
+                    const float* vals = reinterpret_cast<const float*>(buffer.data());
+                    std::string result;
+                    for (uint32_t i = 0; i < metadata.value_count && i < 10; ++i)
+                    {
+                        if (i > 0) result += ",";
+                        result += std::to_string(vals[i]);
+                    }
+                    if (metadata.value_count > 10) result += ",...";
+                    tag_value = std::move(result);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_DOUBLE:
+                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(double))
+                {
+                    double val = *reinterpret_cast<const double*>(buffer.data());
+                    tag_value = val;
+                    value_stored = true;
+                }
+                else if (metadata.value_count > 1)
+                {
+                    // Array of doubles - store as string representation
+                    const double* vals = reinterpret_cast<const double*>(buffer.data());
+                    std::string result;
+                    for (uint32_t i = 0; i < metadata.value_count && i < 10; ++i)
+                    {
+                        if (i > 0) result += ",";
+                        result += std::to_string(vals[i]);
+                    }
+                    if (metadata.value_count > 10) result += ",...";
+                    tag_value = std::move(result);
+                    value_stored = true;
                 }
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_RATIONAL:
                 if (metadata.buffer_size >= 8)
                 {
-                    // Rational = two LONGs (numerator, denominator)
+                    // Rational = two LONGs (numerator, denominator) - store as string
                     uint32_t num = *reinterpret_cast<const uint32_t*>(buffer.data());
                     uint32_t den = *reinterpret_cast<const uint32_t*>(buffer.data() + 4);
                     if (den != 0)
                         tag_value = fmt::format("{}/{}", num, den);
                     else
                         tag_value = std::to_string(num);
+                    value_stored = true;
+                }
+                break;
+                
+            case NVIMGCODEC_METADATA_VALUE_TYPE_SRATIONAL:
+                if (metadata.buffer_size >= 8)
+                {
+                    // Signed Rational = two SLONGs (numerator, denominator) - store as string
+                    int32_t num = *reinterpret_cast<const int32_t*>(buffer.data());
+                    int32_t den = *reinterpret_cast<const int32_t*>(buffer.data() + 4);
+                    if (den != 0)
+                        tag_value = fmt::format("{}/{}", num, den);
+                    else
+                        tag_value = std::to_string(num);
+                    value_stored = true;
                 }
                 break;
                 
             default:
-                // For unknown types, store size info
-                if (metadata.buffer_size <= 8 && metadata.value_count == 1)
+                // For unknown types, store as binary data or string
+                if (metadata.buffer_size > 0)
                 {
-                    // Small value - try to interpret as number
-                    uint64_t val = 0;
-                    std::memcpy(&val, buffer.data(), std::min(metadata.buffer_size, sizeof(val)));
-                    tag_value = std::to_string(val);
-                }
-                else
-                {
-                    tag_value = fmt::format("[{} bytes, type={}]", metadata.buffer_size, 
-                                           static_cast<int>(metadata.value_type));
+                    if (metadata.buffer_size <= 8 && metadata.value_count == 1)
+                    {
+                        // Small value - try to interpret as number and store as string
+                        uint64_t val = 0;
+                        std::memcpy(&val, buffer.data(), std::min(metadata.buffer_size, sizeof(val)));
+                        tag_value = std::to_string(val);
+                    }
+                    else
+                    {
+                        // Store raw bytes
+                        std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + metadata.buffer_size);
+                        tag_value = std::move(vec);
+                    }
+                    value_stored = true;
                 }
                 break;
         }
         
-        if (!tag_value.empty())
+        if (value_stored)
         {
-            ifd_info.tiff_tags[tag_name] = tag_value;
+            ifd_info.tiff_tags[tag_name] = std::move(tag_value);
             extracted_count++;
             
             #ifdef DEBUG
-            fmt::print("    ✅ Tag {} ({}): {}\n", tag_id, tag_name, 
-                      tag_value.length() > 60 ? tag_value.substr(0, 60) + "..." : tag_value);
+            // Format value for debug output
+            std::string debug_str = std::visit([](const auto& v) -> std::string {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::string>)
+                    return v.length() > 60 ? v.substr(0, 60) + "..." : v;
+                else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+                    return fmt::format("[{} bytes]", v.size());
+                else if constexpr (std::is_same_v<T, std::vector<uint16_t>>)
+                    return fmt::format("[{} uint16 values]", v.size());
+                else if constexpr (std::is_same_v<T, std::vector<uint32_t>>)
+                    return fmt::format("[{} uint32 values]", v.size());
+                else if constexpr (std::is_same_v<T, std::vector<uint64_t>>)
+                    return fmt::format("[{} uint64 values]", v.size());
+                else if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double>)
+                    return fmt::format("{}", v);
+                else
+                    return std::to_string(v);
+            }, ifd_info.tiff_tags[tag_name]);
+            fmt::print("    ✅ Tag {} ({}): {}\n", tag_id, tag_name, debug_str);
             #endif // DEBUG
         }
     }
@@ -905,7 +1194,7 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         auto desc_it = ifd_info.tiff_tags.find("IMAGEDESCRIPTION");
         if (desc_it != ifd_info.tiff_tags.end() && ifd_info.image_description.empty())
         {
-            ifd_info.image_description = desc_it->second;
+            ifd_info.image_description = tiff_tag_value_to_string(desc_it->second);
         }
         
         return;  // Success
@@ -927,7 +1216,7 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
     // Aperio SVS, Hamamatsu NDPI, Hamamatsu VMS/VMU typically use JPEG compression
     if (ext == ".svs" || ext == ".ndpi" || ext == ".vms" || ext == ".vmu")
     {
-        ifd_info.tiff_tags["COMPRESSION"] = "7";  // TIFF_COMPRESSION_JPEG
+        ifd_info.tiff_tags["COMPRESSION"] = static_cast<uint16_t>(7);  // TIFF_COMPRESSION_JPEG
         #ifdef DEBUG
         fmt::print("  ✅ Inferred JPEG compression (WSI format: {})\n", ext);
         #endif // DEBUG
