@@ -32,21 +32,21 @@ namespace cuslide2::nvimgcodec
 // RAII Helpers for nvImageCodec Resources
 // ============================================================================
 
-// NOTE: Sub-code streams obtained via nvimgcodecCodeStreamGetSubCodeStream() are VIEWS
-// into the parent stream and share internal data. They should NOT be explicitly destroyed.
-// The parent stream destruction handles cleanup of all sub-streams.
-// Using nvimgcodecCodeStreamDestroy() on sub-streams causes "free(): invalid pointer".
-//
-// We use a no-op deleter for sub-streams to allow RAII-style scoping without destruction.
-struct SubCodeStreamNoOpDeleter
+// RAII wrapper for nvimgcodecCodeStream_t (including sub-code streams)
+// Per nvImageCodec team: each code stream (parent or sub) has its own state
+// and MUST be explicitly destroyed. Sub-streams are NOT automatically cleaned
+// up when the parent is destroyed.
+struct CodeStreamDeleter
 {
-    void operator()(nvimgcodecCodeStream_t) const
+    void operator()(nvimgcodecCodeStream_t stream) const
     {
-        // NO-OP: Sub-streams are views and should not be destroyed
-        // The parent code stream will clean them up
+        if (stream)
+        {
+            nvimgcodecCodeStreamDestroy(stream);
+        }
     }
 };
-using SubCodeStreamView = std::unique_ptr<std::remove_pointer_t<nvimgcodecCodeStream_t>, SubCodeStreamNoOpDeleter>;
+using UniqueCodeStream = std::unique_ptr<std::remove_pointer_t<nvimgcodecCodeStream_t>, CodeStreamDeleter>;
 
 // RAII wrapper for nvimgcodecImage_t
 struct ImageDeleter
@@ -247,8 +247,8 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
             #endif
             return false;
         }
-        // Use no-op deleter: ROI sub-streams are views that shouldn't be destroyed
-        SubCodeStreamView roi_stream(roi_stream_raw);
+        // RAII wrapper - sub-stream will be properly destroyed when scope exits
+        UniqueCodeStream roi_stream(roi_stream_raw);
         
         // Step 2: Determine buffer kind based on target device and decoder
         int device_count = 0;
@@ -408,7 +408,7 @@ bool decode_ifd_region_nvimgcodec(const IfdInfo& ifd_info,
         fmt::print("✅ nvImageCodec ROI decode successful: {}x{} at ({}, {})\n", 
                   width, height, x, y);
         #endif
-        return true;  // image, decode_future cleaned up by RAII; roi_stream is a view (no cleanup needed)
+        return true;  // roi_stream, image, decode_future all cleaned up by RAII
     }
     catch (const std::exception& e)
     {

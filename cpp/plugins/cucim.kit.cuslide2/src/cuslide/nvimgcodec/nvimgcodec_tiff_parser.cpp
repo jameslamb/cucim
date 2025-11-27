@@ -230,37 +230,27 @@ NvImageCodecTiffParserManager::NvImageCodecTiffParserManager()
 
 NvImageCodecTiffParserManager::~NvImageCodecTiffParserManager()
 {
-    // Use try-catch to prevent segfaults during static destruction
-    // when nvTIFF or other libraries weren't loaded properly
-    try
-    {
-        if (cpu_decoder_)
-        {
-            nvimgcodecDecoderDestroy(cpu_decoder_);
-            cpu_decoder_ = nullptr;
-        }
-    }
-    catch (...) { cpu_decoder_ = nullptr; }
+    // Proper cleanup: destroy decoders first, then instance
+    // Per nvImageCodec team: all code streams should be destroyed before this point
+    // (handled by TiffFileParser destructors which are called before singleton destruction)
     
-    try
+    if (cpu_decoder_)
     {
-        if (decoder_)
-        {
-            nvimgcodecDecoderDestroy(decoder_);
-            decoder_ = nullptr;
-        }
+        nvimgcodecDecoderDestroy(cpu_decoder_);
+        cpu_decoder_ = nullptr;
     }
-    catch (...) { decoder_ = nullptr; }
     
-    try
+    if (decoder_)
     {
-        if (instance_)
-        {
-            nvimgcodecInstanceDestroy(instance_);
-            instance_ = nullptr;
-        }
+        nvimgcodecDecoderDestroy(decoder_);
+        decoder_ = nullptr;
     }
-    catch (...) { instance_ = nullptr; }
+    
+    if (instance_)
+    {
+        nvimgcodecInstanceDestroy(instance_);
+        instance_ = nullptr;
+    }
 }
 
 // ============================================================================
@@ -318,30 +308,26 @@ TiffFileParser::TiffFileParser(const std::string& file_path)
 
 TiffFileParser::~TiffFileParser()
 {
-    // NOTE: We intentionally do NOT destroy main_code_stream_ or sub_code_streams here.
-    //
-    // Reason: Static destruction order is undefined at program exit. The singleton
-    // (NvImageCodecTiffParserManager) that owns the nvimgcodec instance might be
-    // destroyed BEFORE this TiffFileParser. If we try to call nvimgcodecCodeStreamDestroy()
-    // on a code stream whose parent instance is already destroyed, we get
-    // "free(): invalid pointer".
-    //
-    // Solution: Let nvimgcodec handle cleanup. When nvimgcodecInstanceDestroy() is called
-    // (in the singleton destructor), it cleans up ALL resources associated with that
-    // instance, including all code streams. This is safe because:
-    // 1. If TiffFileParser is destroyed first → instance cleanup later handles it
-    // 2. If singleton is destroyed first → instance cleanup already handled it
-    //
-    // The only "leak" scenario is if we create many TiffFileParsers during a long-running
-    // session without closing them - but that's a usage issue, not a safety issue.
-    // In practice, CuImage/TIFF objects manage TiffFileParser lifetime properly.
+    // Per nvImageCodec team: each code stream (parent or sub) has its own state
+    // and MUST be explicitly destroyed. Sub-streams are NOT automatically cleaned
+    // up when the parent is destroyed.
     
-    // Clear pointers (don't destroy - instance cleanup handles it)
+    // Destroy sub-code streams first (IFD streams)
     for (auto& ifd_info : ifd_infos_)
     {
-        ifd_info.sub_code_stream = nullptr;
+        if (ifd_info.sub_code_stream)
+        {
+            nvimgcodecCodeStreamDestroy(ifd_info.sub_code_stream);
+            ifd_info.sub_code_stream = nullptr;
+        }
     }
-    main_code_stream_ = nullptr;
+    
+    // Then destroy main code stream
+    if (main_code_stream_)
+    {
+        nvimgcodecCodeStreamDestroy(main_code_stream_);
+        main_code_stream_ = nullptr;
+    }
     
     ifd_infos_.clear();
 }
