@@ -116,6 +116,37 @@ static uint16_t tiff_tag_value_to_uint16(const TiffTagValue& value)
     }, value);
 }
 
+// Template helper to extract single scalar value from TIFF tag metadata
+// Per nvImageCodec team: value_count check is sufficient, buffer_size check is redundant
+template<typename T>
+static bool extract_single_value(const std::vector<uint8_t>& buffer, 
+                                 int value_count,
+                                 TiffTagValue& out_value)
+{
+    if (value_count == 1)
+    {
+        T val = *reinterpret_cast<const T*>(buffer.data());
+        out_value = val;
+        return true;
+    }
+    return false;
+}
+
+// Template helper to extract array of values as vector
+template<typename T>
+static bool extract_value_array(const std::vector<uint8_t>& buffer,
+                                int value_count,
+                                TiffTagValue& out_value)
+{
+    if (value_count > 1)
+    {
+        const T* vals = reinterpret_cast<const T*>(buffer.data());
+        out_value = std::vector<T>(vals, vals + value_count);
+        return true;
+    }
+    return false;
+}
+
 // ============================================================================
 // NvImageCodecTiffParserManager Implementation
 // ============================================================================
@@ -902,37 +933,13 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
             }
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SHORT:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint16_t))
-                {
-                    uint16_t val = *reinterpret_cast<const uint16_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of shorts - store as vector
-                    const uint16_t* vals = reinterpret_cast<const uint16_t*>(buffer.data());
-                    std::vector<uint16_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<uint16_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint16_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_LONG:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint32_t))
-                {
-                    uint32_t val = *reinterpret_cast<const uint32_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of longs - store as vector
-                    const uint32_t* vals = reinterpret_cast<const uint32_t*>(buffer.data());
-                    std::vector<uint32_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<uint32_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint32_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_BYTE:
@@ -975,83 +982,29 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SSHORT:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int16_t))
-                {
-                    int16_t val = *reinterpret_cast<const int16_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of signed shorts - store as vector<uint16_t> (reinterpret as needed)
-                    const uint16_t* vals = reinterpret_cast<const uint16_t*>(buffer.data());
-                    std::vector<uint16_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<int16_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint16_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SLONG:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int32_t))
-                {
-                    int32_t val = *reinterpret_cast<const int32_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of signed longs - store as vector<uint32_t> (reinterpret as needed)
-                    const uint32_t* vals = reinterpret_cast<const uint32_t*>(buffer.data());
-                    std::vector<uint32_t> vec(vals, vals + metadata.value_count);
-                    tag_value = std::move(vec);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<int32_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint32_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_LONG8:
             case NVIMGCODEC_METADATA_VALUE_TYPE_IFD8:
-                // 64-bit unsigned integer (BigTIFF)
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(uint64_t))
-                {
-                    uint64_t val = *reinterpret_cast<const uint64_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of 64-bit values - validate count against buffer size
-                    const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
-                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
-                                           metadata.buffer_size / sizeof(uint64_t));
-                    tag_value = std::vector<uint64_t>(vals, vals + count);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<uint64_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint64_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_SLONG8:
-                // 64-bit signed integer (BigTIFF)
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(int64_t))
-                {
-                    int64_t val = *reinterpret_cast<const int64_t*>(buffer.data());
-                    tag_value = val;
-                    value_stored = true;
-                }
-                else if (metadata.value_count > 1)
-                {
-                    // Array of signed 64-bit values - validate count against buffer size
-                    const uint64_t* vals = reinterpret_cast<const uint64_t*>(buffer.data());
-                    size_t count = std::min(static_cast<size_t>(metadata.value_count),
-                                           metadata.buffer_size / sizeof(uint64_t));
-                    tag_value = std::vector<uint64_t>(vals, vals + count);
-                    value_stored = true;
-                }
+                value_stored = extract_single_value<int64_t>(buffer, metadata.value_count, tag_value) ||
+                              extract_value_array<uint64_t>(buffer, metadata.value_count, tag_value);
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_FLOAT:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(float))
+                if (extract_single_value<float>(buffer, metadata.value_count, tag_value))
                 {
-                    float val = *reinterpret_cast<const float*>(buffer.data());
-                    tag_value = val;
                     value_stored = true;
                 }
                 else if (metadata.value_count > 1)
@@ -1071,10 +1024,8 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                 break;
                 
             case NVIMGCODEC_METADATA_VALUE_TYPE_DOUBLE:
-                if (metadata.value_count == 1 && metadata.buffer_size >= sizeof(double))
+                if (extract_single_value<double>(buffer, metadata.value_count, tag_value))
                 {
-                    double val = *reinterpret_cast<const double*>(buffer.data());
-                    tag_value = val;
                     value_stored = true;
                 }
                 else if (metadata.value_count > 1)
