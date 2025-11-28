@@ -1119,18 +1119,19 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
                     }
                     else
                     {
-                        // Store raw bytes - limit size to prevent storing huge blobs
-                        constexpr size_t MAX_BINARY_SIZE = 4096;  // 4KB limit for binary metadata
-                        size_t store_size = std::min(metadata.buffer_size, MAX_BINARY_SIZE);
-                        std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + store_size);
-                        tag_value = std::move(vec);
-                        #ifdef DEBUG
-                        if (metadata.buffer_size > MAX_BINARY_SIZE)
+                        // Store raw bytes - optionally limit size to prevent storing huge blobs
+                        // Use configurable limit (0 = unlimited, default)
+                        size_t store_size = metadata.buffer_size;
+                        if (max_binary_tag_size_ > 0 && metadata.buffer_size > max_binary_tag_size_)
                         {
+                            store_size = max_binary_tag_size_;
+                            #ifdef DEBUG
                             fmt::print("  ℹ️  TIFF tag {} binary data truncated: {} -> {} bytes\n",
                                       tag_id, metadata.buffer_size, store_size);
+                            #endif
                         }
-                        #endif
+                        std::vector<uint8_t> vec(buffer.begin(), buffer.begin() + store_size);
+                        tag_value = std::move(vec);
                     }
                     value_stored = true;
                 }
