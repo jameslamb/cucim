@@ -107,43 +107,6 @@ static std::string tiff_tag_value_to_string(const TiffTagValue& value)
     }, value);
 }
 
-// Helper to get uint16_t value from TiffTagValue (returns 0 if not convertible)
-static uint16_t tiff_tag_value_to_uint16(const TiffTagValue& value)
-{
-    return std::visit([](const auto& v) -> uint16_t {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, std::monostate>)
-            return 0;  // Empty/unset
-        else if constexpr (std::is_same_v<T, uint16_t>)
-            return v;
-        else if constexpr (std::is_same_v<T, uint8_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, int8_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, int16_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, int32_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, uint32_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, int64_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, uint64_t>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, float>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, double>)
-            return static_cast<uint16_t>(v);
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-            try { return static_cast<uint16_t>(std::stoi(v)); }
-            catch (...) { return 0; }
-        }
-        else
-            return 0;
-    }, value);
-}
-
 // Template helper to extract single scalar value from TIFF tag metadata
 // Per nvImageCodec team: value_count check is sufficient, buffer_size check is redundant
 template<typename T>
@@ -523,8 +486,9 @@ void TiffFileParser::parse_tiff_structure()
             {
                 try
                 {
-                    // Get compression value from typed variant
-                    uint16_t compression_value = tiff_tag_value_to_uint16(compression_it->second);
+                    // COMPRESSION tag is always SHORT (uint16_t) per TIFF spec
+                    // If it's not, that indicates a bug in nvImageCodec or our parsing
+                    uint16_t compression_value = std::get<uint16_t>(compression_it->second);
                     
                     switch (compression_value)
                     {
