@@ -1210,12 +1210,6 @@ void TiffFileParser::extract_tiff_tags(IfdInfo& ifd_info)
         fmt::print("  ✅ Inferred JPEG compression (WSI format: {})\n", ext);
         #endif // DEBUG
     }
-    
-    // Store ImageDescription if available from vendor metadata
-    if (!ifd_info.image_description.empty())
-    {
-        ifd_info.tiff_tags["IMAGEDESCRIPTION"] = ifd_info.image_description;
-    }
 }
 
 int TiffFileParser::get_subfile_type(uint32_t ifd_index) const
