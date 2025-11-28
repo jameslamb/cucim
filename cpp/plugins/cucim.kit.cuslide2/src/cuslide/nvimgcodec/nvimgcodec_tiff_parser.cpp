@@ -484,10 +484,10 @@ void TiffFileParser::parse_tiff_structure()
             auto compression_it = ifd_info.tiff_tags.find("COMPRESSION");
             if (compression_it != ifd_info.tiff_tags.end())
             {
-                try
+                // COMPRESSION tag is always SHORT (uint16_t) per TIFF spec
+                // Check type before extracting to avoid exceptions
+                if (std::holds_alternative<uint16_t>(compression_it->second))
                 {
-                    // COMPRESSION tag is always SHORT (uint16_t) per TIFF spec
-                    // If it's not, that indicates a bug in nvImageCodec or our parsing
                     uint16_t compression_value = std::get<uint16_t>(compression_it->second);
                     
                     switch (compression_value)
@@ -537,10 +537,10 @@ void TiffFileParser::parse_tiff_structure()
                             break;
                     }
                 }
-                catch (const std::exception& e)
+                else
                 {
                     #ifdef DEBUG
-                    fmt::print("  ⚠️  Failed to parse COMPRESSION tag value: {}\n", e.what());
+                    fmt::print("  ⚠️  COMPRESSION tag is not uint16_t (unexpected type)\n");
                     #endif // DEBUG
                 }
             }
