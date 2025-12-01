@@ -109,9 +109,12 @@ public:
         }
         else
         {
-            // Use pinned memory for faster GPU-to-host transfers when GPU backend is used
-            cudaError_t status = cudaMallocHost(&buffer_, size);
-            return status == cudaSuccess;
+            // Use standard malloc for CPU memory
+            // NOTE: Must use malloc() (not cudaMallocHost()) because cuCIM's cleanup
+            // code uses free(). Using cudaMallocHost() would require cudaFreeHost(),
+            // causing "free(): invalid pointer" crash when cuCIM calls free().
+            buffer_ = malloc(size);
+            return buffer_ != nullptr;
         }
     }
 
@@ -122,7 +125,7 @@ public:
             if (is_device_)
                 cudaFree(buffer_);
             else
-                cudaFreeHost(buffer_);  // Pinned memory must use cudaFreeHost
+                free(buffer_);  // Standard free (matches malloc)
             buffer_ = nullptr;
         }
     }
