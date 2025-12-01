@@ -17,15 +17,13 @@ from .convex_hull import (
 )
 from .footprints import (
     ball,
-    cube,
     diamond,
     disk,
+    ellipse,
     footprint_from_sequence,
     footprint_rectangle,
     octagon,
     octahedron,
-    rectangle,
-    square,
     star,
 )
 from .gray import (
@@ -66,6 +64,7 @@ __all__ = [
     "footprint_rectangle",
     "diamond",
     "disk",
+    "ellipse",
     "octahedron",
     "ball",
     "octagon",
